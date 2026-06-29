@@ -1,0 +1,69 @@
+services:
+  
+  # ===HDFS===
+  namenode:
+    image: apache/hadoop:3.5.0
+    container_name: namenode
+    port:
+      - "9870:9870"  # NameNode Web UI
+      - "9000:9000"  # HDFS
+    volumes:
+      - namenode-data:/hadoop/dfs/name
+      - ./docker/hadoop-server/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./docker/hadoop-server/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+      - ./docker/hadoop-server/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties
+    command:
+      - bash
+      - -c
+      - |
+      - if [ ! -d /hadoop/dfs/name/current ]; then
+          echo "Formatting NameNode..."
+          hdfs namenode -format -clusterid finpulse -nonInteractive
+        fi
+        exec hdfs namenode # hdfs becomes the container's PID 1 (not bash), allow receiving any Unix signals sent to the container
+    networks: finpulse-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9870/ > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      
+  datanode-1:
+    image: apache/hadoop:3.5.0
+    container_name: datanode-1
+    command: ["hdfs", "datanode"]
+    depends_on:
+      namenode:
+        condition: service_healthy
+    volumes:
+      - datanode1-data:/hadoop/dfs/data
+      - ./docker/hadoop-server/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./docker/hadoop-server/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./docker/hadoop-server/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties:ro
+    networks: finpulse-network
+
+  datanode-2:
+    image: apache/hadoop:3.5.0
+    container_name: datanode-2
+    command: ["hdfs", "datanode"]
+    depends_on:
+      namenode:
+        condition: service_healthy
+    volumes:
+      - datanode2-data:/hadoop/dfs/data
+      - ./docker/hadoop-server/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./docker/hadoop-server/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./docker/hadoop-server/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties:ro
+    networks: finpulse-network
+
+    
+
+volumes:
+  namenode-data:
+  datanode1-data:
+  datanode2-data:
+
+
+networks:
+  finpulse-network:
+    driver: bridge
