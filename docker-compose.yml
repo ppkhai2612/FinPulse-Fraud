@@ -4,7 +4,8 @@ services:
   namenode:
     image: apache/hadoop:3.5.0
     container_name: namenode
-    port:
+    user: root
+    ports:
       - "9870:9870"  # NameNode Web UI
       - "9000:9000"  # HDFS
     volumes:
@@ -16,12 +17,13 @@ services:
       - bash
       - -c
       - |
-      - if [ ! -d /hadoop/dfs/name/current ]; then
+        if [ ! -d /hadoop/dfs/name/current ]; then
           echo "Formatting NameNode..."
           hdfs namenode -format -clusterid finpulse -nonInteractive
         fi
         exec hdfs namenode # hdfs becomes the container's PID 1 (not bash), allow receiving any Unix signals sent to the container
-    networks: finpulse-network
+    networks:
+      - finpulse-network
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9870/ > /dev/null"]
       interval: 10s
@@ -31,6 +33,7 @@ services:
   datanode-1:
     image: apache/hadoop:3.5.0
     container_name: datanode-1
+    user: root
     command: ["hdfs", "datanode"]
     depends_on:
       namenode:
@@ -40,11 +43,13 @@ services:
       - ./docker/hadoop-server/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
       - ./docker/hadoop-server/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
       - ./docker/hadoop-server/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties:ro
-    networks: finpulse-network
+    networks:
+      - finpulse-network
 
   datanode-2:
     image: apache/hadoop:3.5.0
     container_name: datanode-2
+    user: root
     command: ["hdfs", "datanode"]
     depends_on:
       namenode:
@@ -54,9 +59,14 @@ services:
       - ./docker/hadoop-server/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
       - ./docker/hadoop-server/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
       - ./docker/hadoop-server/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties:ro
-    networks: finpulse-network
+    networks:
+      - finpulse-network
 
-    
+  # ===Spark===
+  
+
+  # ===Kafka===
+
 
 volumes:
   namenode-data:
