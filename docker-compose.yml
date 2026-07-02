@@ -63,7 +63,82 @@ services:
       - finpulse-network
 
   # ===Spark===
+  spark-master:
+    image: apache/spark:4.0.0
+    container_name: spark-master
+    user: root
+    networks:
+      - finpulse-network
+    ports:
+      - 7077:7077 # Spark master RPC port
+      - 8080:8080 # Spark master web UI port
+    environment:
+      - HADOOP_CONF_DIR=/etc/hadoop/conf
+      - SPARK_NO_DAEMONIZE=true # run Spark master in the foreground
+    volumes:
+      - ./docker/hadoop-client:/etc/hadoop/conf
+      - ./docker/spark:/opt/spark/conf
+      - ./jobs:/opt/spark/work-dir/jobs
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.master.Master
+      - --host
+      - spark-master
+      - --port
+      - "7077"
+      - --webui-port
+      - "8080"
+    
+  spark-worker-1:
+    image: apache/spark:4.0.0
+    container_name: spark-worker-1
+    user: root
+    depends_on:
+      - spark-master
+    networks:
+      - finpulse-network
+    environment:
+      - HADOOP_CONF_DIR=/etc/hadoop/conf
+      - SPARK_NO_DAEMONIZE=true
+    volumes:
+      - ./docker/hadoop-client:/etc/hadoop/conf
+      - ./docker/spark:/opt/spark/conf
+      - ./jobs:/opt/spark/work-dir/jobs
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+      - --cores
+      - "2"
+      - --memory
+      - 2g
+      - --webui-port
+      - "8081"
   
+  spark-worker-2:
+    image: apache/spark:4.0.0
+    container_name: spark-worker-2
+    depends_on:
+      - spark-master
+    networks:
+      - finpulse-network
+    environment:
+      - HADOOP_CONF_DIR=/etc/hadoop/conf
+      - SPARK_NO_DAEMONIZE=true
+    volumes:
+      - ./docker/hadoop-client:/etc/hadoop/conf
+      - ./docker/spark:/opt/spark/conf
+      - ./jobs:/opt/spark/work-dir/jobs
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+      - --cores
+      - "2"
+      - --memory
+      - 2g
+      - --webui-port
+      - "8081"
 
   # ===Kafka===
 
