@@ -2,11 +2,11 @@
 
 ## Tasks
 
-Read raw data from the HDFS landing zone using PySpark
-Clean, standardize, and validate the data (handle nulls, fix types, deduplicate)
-Join multiple data sources to create enriched datasets
-Aggregate data to answer the company's business questions
-Write curated and analytics outputs as Parquet with appropriate partitioning
+- Read raw data from the HDFS landing zone using PySpark
+- Clean, standardize, and validate the data (handle nulls, fix types, deduplicate)
+- Join multiple data sources to create enriched datasets
+- Aggregate data to answer the company's business questions
+- Write curated and analytics outputs as Parquet with appropriate partitioning
 
 ## Decisions
 
@@ -41,3 +41,44 @@ docker compose exec spark-master /opt/spark/bin/spark-submit \
 `docker compose exec namenode hdfs dfs -du -h /curated/*/*`: Displays sizes of files in `curated/` directory, a note that the second column in result is disk space consumed with all replicas (e.g., 2 replicas)
 
 ![](../../images/tests_curate_step.png)
+
+
+
+
+
+
+
+
+
+
+
+docker compose exec -it spark-master /opt/spark/bin/pyspark     --master spark://spark-master:7077     --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0
+
+
+
+
+```bash
+|{"txn_id": "TXN-0000001", "timestamp": "2025-06-15 09:59:52", "card_id": "CARD-043960", "merchant_id": "MERCH-09873", "amount": "179.84", "currency": "USD", "merchant_category": "gas_station", "country": "US", "channel": "online", "is_international": "true"}           |
+|{"txn_id": "TXN-0000002", "timestamp": "2025-06-25 04:01:48", "card_id": "CARD-055222", "merchant_id": "MERCH-00118", "amount": "194.28", "currency": "USD", "merchant_category": "entertainment", "country": "DE", "channel": "in_store", "is_international": "true"}  |
+
+```
+
+
+After from_json(), DataFrame schema was look like
+
+```bash
+root
+ |-- t: struct
+ |    |-- txn_id: string
+ |    |-- timestamp: string
+ |    |-- card_id: string
+ |    |-- merchant_id: string
+ |    |-- amount: string
+ |    |-- currency: string
+ |    |-- merchant_category: string
+ |    |-- country: string
+ |    |-- channel: string
+ |    |-- is_international: string
+```
+
+So 

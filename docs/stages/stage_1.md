@@ -37,7 +37,7 @@ HDFS is implemented with 1 NameNode (`namenode`) and 2 DataNodes (`datanode-1` a
 
 ### Landing Script
 
-When run the Python script [land_data.py](../scripts/land_data.py), the five commands are executed sequentially (e.g., for `merchant-directory.csv.gz`)
+When run the Python script [land_data.py](../../scripts/land_data.py), the five commands are executed sequentially (e.g., for `merchant-directory.csv.gz`)
 
 ```bash
 # Create the per-dataset directory in HDFS
