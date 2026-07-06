@@ -141,13 +141,75 @@ services:
       - "8081"
 
   # ===Kafka===
+  kafka:
+    image: apache/kafka:4.3.0
+    container_name: kafka
+    user: "0:0"
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_NODE_ID=0 
+      - KAFKA_LOG_DIRS=/var/lib/kafka/data
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_LISTENERS=INTERNAL://:9094,CONTROLLER://:9093,EXTERNAL://:9092
+      - KAFKA_ADVERTISED_LISTENERS=INTERNAL://kafka:9094,EXTERNAL://localhost:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CONTROLLER_QUORUM_BOOTSTRAP_SERVERS=kafka:9093
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACOTR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - finpulse-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:9094 > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  
+  kafdrop:
+    image: obsidiandynamics/kafdrop:latest
+    container_name: kafdrop
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - KAFKA_BROKERCONNECT=kafka:9094
+      - SERVER_SERVLET_CONTEXTPATH="/"
+    ports:
+      - "9001:9000"  # UI on localhost:9001 (9000 is taken by HDFS RPC)
+    networks:
+      - finpulse-network
 
+  producer:
+    image: python:3.11-slim-bullseye
+    container_name: producer
+    volumes: 
+      - ./producers:/opt/producers
+      - ./data:/opt/data
+    command:
+      - bash
+      - -c
+      - "pip install --no-cache-dir kafka-python==2.0.3 && exec sleep infinity"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - finpulse-network
+    restart: unless-stopped
 
 volumes:
   namenode-data:
   datanode1-data:
   datanode2-data:
-
+  kafka-data:
 
 networks:
   finpulse-network:
