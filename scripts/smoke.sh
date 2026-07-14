@@ -59,7 +59,28 @@ smoke_spark() {
 
 
 smoke_kafka() {
-    echo ""
+    step "Smoke tests for Kafka: create topic + produce + consume"
+
+    TOPIC="smoke-$(date +%s)"
+    $COMPOSE exec -T kafka bash -c "
+        set -e
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9094 \
+            --create --if-not-exists --topic ${TOPIC} --partitions 1 --replication-factor 1 >/dev/null
+        
+        for i in 1 2 3 4 5; do echo \"msg-\$i\"; done | \
+            /opt/kafka/bin/kafka-console-producer.sh \
+            --bootstrap-server kafka:9094 --topic ${TOPIC} >/dev/null
+
+        out=\$(/opt/kafka/bin/kafka-console-consumer.sh \
+            --bootstrap-server kafka:9094 --topic ${TOPIC} \
+            --from-beginning --max-messages 5 --timeout-ms 10000 2>/dev/null | wc -l | tr -d ' ')
+        
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9094 \
+            --delete --topic ${TOPIC} >/dev/null
+        
+        test \"\$out\" = \"5\" || { echo \"expected 5 messages, got \$out\"; exit 1; }
+    " || die "Kafka produce/consume failed"
+    ok "Kafka produce/consume works"
 }
 
 
@@ -74,6 +95,6 @@ case ${1:-all} in
 	spark)  smoke_spark  ;;
     kafka)  smoke_kafka  ;;
     airflow)  smoke_airflow  ;;
-    all)  smoke_hdfs; smoke_spark; smoke_kafka; smoke_airflow
+    all)  smoke_hdfs; smoke_spark; smoke_kafka; smoke_airflow ;;
 	*)  echo "Usage: $0 [hdfs|spark|kafka|airflow|all]"; exit 2 ;;
 esac
