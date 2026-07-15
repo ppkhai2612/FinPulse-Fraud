@@ -1,26 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
+    
+    <!-- Cluster-wide-->
     <property>
         <name>dfs.replication</name>
         <value>2</value>
-    </property>
-
-    <!-- NameNode-only -->
-    <property>
-        <name>dfs.namenode.datanode.registration.ip-hostname-check</name>
-        <value>false</value>
+        <description>Default block replication</description>
     </property>
 
     <property>
         <name>dfs.permissions.enabled</name>
         <value>false</value>
+        <description>Turn off permission checking</description>
     </property>
     
     <property>
         <name>dfs.client.use.datanode.hostname</name>
         <value>true</value>
+        <description>Clients use datanode hostnames when connecting to datanodes</description>
     </property>
 
+    <!-- NameNode-only -->
+    <property>
+        <name>dfs.namenode.rpc-address</name>
+        <value>namenode:9000</value>
+        <description>RPC address that handles all clients requests</description>
+    </property>
+
+    <property>
+        <name>dfs.namenode.name.dir</name>
+        <value>file:///hadoop/dfs/name</value>
+        <description>Determines where on the local filesystem the DFS name node should store the name table (fsimage)</description>
+    </property>
+
+    <property>
+        <name>dfs.namenode.datanode.registration.ip-hostname-check</name>
+        <value>false</value>
+        <description>The namenode allows connections from datanodes without requiring their IP addresses to be resolved to hostnames</description>
+    </property>
+
+    <!-- DataNode-only -->
+    <property>
+        <name>dfs.datanode.data.dir</name>
+        <value>file:///hadoop/dfs/data</value>
+        <description>Determines where on the local filesystem an DFS data node should store its blocks</description>
+    </property>
 
 </configuration>
-
