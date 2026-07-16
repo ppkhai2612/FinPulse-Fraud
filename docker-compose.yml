@@ -76,6 +76,7 @@ services:
       - ./docker/hadoop-client:/etc/hadoop/conf
       - ./docker/spark:/opt/spark/conf
       - ./spark_jobs:/opt/spark/work-dir/jobs
+      - ./pinot-offline:/opt/pinot-offline
     command:
       - /opt/spark/bin/spark-class
       - org.apache.spark.deploy.master.Master
@@ -102,6 +103,7 @@ services:
       - ./docker/hadoop-client:/etc/hadoop/conf
       - ./docker/spark:/opt/spark/conf
       - ./spark_jobs:/opt/spark/work-dir/jobs
+      - ./pinot-offline:/opt/pinot-offline
     command:
       - /opt/spark/bin/spark-class
       - org.apache.spark.deploy.worker.Worker
@@ -128,6 +130,7 @@ services:
   #     - ./docker/hadoop-client:/etc/hadoop/conf
   #     - ./docker/spark:/opt/spark/conf
   #     - ./jobs:/opt/spark/work-dir/jobs
+  #     - ./pinot-offline:/opt/pinot-offline
   #   command:
   #     - /opt/spark/bin/spark-class
   #     - org.apache.spark.deploy.worker.Worker
@@ -224,11 +227,13 @@ services:
       retries: 5
       start_period: 10s
   
-  pinot-controller: # global metadata storage and maintains the mapping of segments to servers
+  pinot-controller:
     image: apachepinot/pinot:1.2.0
     container_name: pinot-controller
     volumes:
       - pinot-controller-data:/opt/pinot/data/controller
+      - ./pinot-offline:/opt/pinot/data/pinot-offline
+      - ./pinot_conf:/opt/pinot/conf
     ports:
       - "9100:9000"
     environment:
