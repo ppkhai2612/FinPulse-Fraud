@@ -12,7 +12,6 @@ services:
       - namenode-data:/hadoop/dfs/name
       - ./docker/hadoop-server/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
       - ./docker/hadoop-server/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
-      - ./docker/hadoop-server/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties
     command:
       - bash
       - -c
@@ -42,7 +41,6 @@ services:
       - datanode1-data:/hadoop/dfs/data
       - ./docker/hadoop-server/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
       - ./docker/hadoop-server/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
-      - ./docker/hadoop-server/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties:ro
     networks:
       - finpulse-network
 
@@ -58,7 +56,6 @@ services:
       - datanode2-data:/hadoop/dfs/data
       - ./docker/hadoop-server/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
       - ./docker/hadoop-server/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
-      - ./docker/hadoop-server/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties:ro
     networks:
       - finpulse-network
 
@@ -78,7 +75,7 @@ services:
     volumes:
       - ./docker/hadoop-client:/etc/hadoop/conf
       - ./docker/spark:/opt/spark/conf
-      - ./jobs:/opt/spark/work-dir/jobs
+      - ./spark_jobs:/opt/spark/work-dir/jobs
     command:
       - /opt/spark/bin/spark-class
       - org.apache.spark.deploy.master.Master
@@ -88,6 +85,7 @@ services:
       - "7077"
       - --webui-port
       - "8080"
+    # mem_limit: 1024m # 0.5GB
     
   spark-worker-1:
     image: apache/spark:4.0.0
@@ -103,7 +101,7 @@ services:
     volumes:
       - ./docker/hadoop-client:/etc/hadoop/conf
       - ./docker/spark:/opt/spark/conf
-      - ./jobs:/opt/spark/work-dir/jobs
+      - ./spark_jobs:/opt/spark/work-dir/jobs
     command:
       - /opt/spark/bin/spark-class
       - org.apache.spark.deploy.worker.Worker
@@ -111,34 +109,36 @@ services:
       - --cores
       - "2"
       - --memory
-      - 2g
+      - 1g
       - --webui-port
       - "8081"
+    mem_limit: 1536m # 1.5GB
   
-  spark-worker-2:
-    image: apache/spark:4.0.0
-    container_name: spark-worker-2
-    depends_on:
-      - spark-master
-    networks:
-      - finpulse-network
-    environment:
-      - HADOOP_CONF_DIR=/etc/hadoop/conf
-      - SPARK_NO_DAEMONIZE=true
-    volumes:
-      - ./docker/hadoop-client:/etc/hadoop/conf
-      - ./docker/spark:/opt/spark/conf
-      - ./jobs:/opt/spark/work-dir/jobs
-    command:
-      - /opt/spark/bin/spark-class
-      - org.apache.spark.deploy.worker.Worker
-      - spark://spark-master:7077
-      - --cores
-      - "2"
-      - --memory
-      - 2g
-      - --webui-port
-      - "8081"
+  # spark-worker-2:
+  #   image: apache/spark:4.0.0
+  #   container_name: spark-worker-2
+  #   depends_on:
+  #     - spark-master
+  #   networks:
+  #     - finpulse-network
+  #   environment:
+  #     - HADOOP_CONF_DIR=/etc/hadoop/conf
+  #     - SPARK_NO_DAEMONIZE=true
+  #   volumes:
+  #     - ./docker/hadoop-client:/etc/hadoop/conf
+  #     - ./docker/spark:/opt/spark/conf
+  #     - ./jobs:/opt/spark/work-dir/jobs
+  #   command:
+  #     - /opt/spark/bin/spark-class
+  #     - org.apache.spark.deploy.worker.Worker
+  #     - spark://spark-master:7077
+  #     - --cores
+  #     - "2"
+  #     - --memory
+  #     - 2g
+  #     - --webui-port
+  #     - "8081"
+  #   mem_limit: 2500m
 
   # ===Kafka===
   kafka:
@@ -173,26 +173,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    mem_limit: 1536m
   
-  kafdrop:
-    image: obsidiandynamics/kafdrop:latest
-    container_name: kafdrop
-    depends_on:
-      kafka:
-        condition: service_healthy
-    environment:
-      - KAFKA_BROKERCONNECT=kafka:9094
-      - SERVER_SERVLET_CONTEXTPATH="/"
-    ports:
-      - "9001:9000"  # UI on localhost:9001 (9000 is taken by HDFS RPC)
-    networks:
-      - finpulse-network
+  # kafdrop:
+  #   image: obsidiandynamics/kafdrop:latest
+  #   container_name: kafdrop
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #   environment:
+  #     - KAFKA_BROKERCONNECT=kafka:9094
+  #   ports:
+  #     - "9001:9000"  # UI on localhost:9001 (9000 is taken by HDFS RPC)
+  #   networks:
+  #     - finpulse-network
 
   producer:
     image: python:3.11-slim-bullseye
     container_name: producer
     volumes: 
-      - ./producers:/opt/producers
+      - ./kafka_producers:/opt/producers
       - ./data:/opt/data
     command:
       - bash
@@ -205,11 +205,225 @@ services:
       - finpulse-network
     restart: unless-stopped
 
+  # ===Pinot===
+  pinot-zookeeper:
+    image: zookeeper:3.9
+    container_name: pinot-zookeeper
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+    volumes:
+      - pinot-zk-data:/data
+      - pinot-zk-datalog:/datalog
+    networks:
+      - finpulse-network
+    healthcheck:
+      test: ["CMD-SHELL", "zkServer.sh status"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+  
+  pinot-controller: # global metadata storage and maintains the mapping of segments to servers
+    image: apachepinot/pinot:1.2.0
+    container_name: pinot-controller
+    volumes:
+      - pinot-controller-data:/opt/pinot/data/controller
+    ports:
+      - "9100:9000"
+    environment:
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+    command:
+      - StartController
+      - -zkAddress
+      - pinot-zookeeper:2181
+      - -clusterName
+      - finpulse
+      - -controllerPort
+      - "9000"
+      - -dataDir
+      - /opt/pinot/data/controller
+    depends_on:
+      pinot-zookeeper:
+        condition: service_healthy
+    networks:
+      - finpulse-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+  
+  pinot-broker:
+    image: apachepinot/pinot:1.2.0
+    container_name: pinot-broker
+    ports:
+      - "8099:8099"
+    environment:
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+    command:
+      - StartBroker
+      - -zkAddress
+      - pinot-zookeeper:2181
+      - -clusterName
+      - finpulse
+      - -brokerHost
+      - pinot-broker
+      - -brokerPort
+      - "8099"
+    depends_on:
+      pinot-controller:
+        condition: service_healthy
+    networks:
+      - finpulse-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8099/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+  
+  pinot-server: # hosting segments and query execution
+    image: apachepinot/pinot:1.2.0
+    container_name: pinot-server
+    volumes:
+      - pinot-server-data:/opt/pinot/data/server
+    environment:
+      - JAVA_OPTS=-Xms512m -Xmx1g -XX:+UseG1GC
+    command:
+      - StartServer
+      - -zkAddress
+      - pinot-zookeeper:2181
+      - -clusterName
+      - finpulse
+      - -serverHost
+      - pinot-server
+      - -serverPort
+      - "8098"
+      - -serverAdminPort
+      - "8097"
+      - -dataDir
+      - /opt/pinot/data/server/index
+      - -segmentDir
+      - /opt/pinot/data/server/segment
+    depends_on:
+      pinot-broker:
+        condition: service_healthy
+    networks:
+      - finpulse-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8097/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # ===Hive Metastore===
+  # See the docs: https://hive.apache.org/docs/latest/admin/adminmanual-metastore-administration/
+  metastore-db:
+    image: postgres:16
+    container_name: metastore-db
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    volumes:
+      - metastore-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "hive"]
+      interval: 5s
+      retries: 10
+    networks:
+      - finpulse-network
+
+  hive-metastore-init:
+    image: apache/hive:4.0.0
+    container_name: hive-metastore-init
+    user: root
+    environment:
+      HADOOP_CONF_DIR: /opt/hadoop/conf
+    volumes:
+      - ./docker/hive-metastore/metastore-site.xml:/opt/hive/conf/metastore-site.xml
+      - ./docker/hive-metastore/jars:/opt/hive/jdbc
+      - ./docker/hadoop-client:/opt/hadoop/conf
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        # Sanity: Postgres JDBC driver must be present on the host
+        if ! ls /opt/hive/jdbc/postgresql-*.jar > /dev/null 2>&1; then
+          echo "ERROR: Postgres JDBC driver missing in ./docker/hive-metastore/jars/"
+          echo "Run 'make hive-deps' to download it"
+          exit 1
+        fi
+        cp /opt/hive/jdbc/postgresql-*.jar /opt/hive/lib/
+        # Idempotent schema init: 
+        if /opt/hive/bin/schematool -dbType postgres -info > /dev/null 2>&1; then
+          echo "HMS schema has already been initialized - skipping schematool"
+        else
+          echo "Initializing HMS schema in metastore-db..."
+          /opt/hive/bin/schematool -dbType postgres -initSchema --verbose
+        fi
+        # ensure the HDFS /warehouse root exists
+        /opt/hadoop/bin/hdfs dfs -mkdir -p /warehouse 2>/dev/null || \
+          /opt/hadoop/bin/hdfs dfs -mkdir -p /warehouse 2>/dev/null || true
+        echo "HMS init completed"
+    depends_on:
+      metastore-db:
+        condition: service_healthy
+      namenode:
+        condition: service_healthy
+    networks:
+      - finpulse-network
+    restart: "no"
+
+  hive-metastore:
+    image: apache/hive:4.0.0
+    container_name: hive-metastore
+    user: root
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      IS_RESUME: "true" # skip schematool
+      HADOOP_CONF_DIR: /opt/hadoop/conf
+    volumes:
+      - ./docker/hive-metastore/metastore-site.xml:/opt/hive/conf/metastore-site.xml
+      - ./docker/hive-metastore/jars:/opt/hive/jdbc
+      - ./docker/hadoop-client:/opt/hadoop/conf
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        cp /opt/hive/jdbc/postgresql-*.jar /opt/hive/lib/
+        exec /entrypoint.sh
+    depends_on:
+      hive-metastore-init:
+        condition: service_completed_successfully
+    networks:
+      - finpulse-network
+    healthcheck:
+      # HMS exposes Thrift on 9083 — no HTTP endpoint, so just probe TCP.
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9083' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+
+
 volumes:
   namenode-data:
   datanode1-data:
   datanode2-data:
   kafka-data:
+  pinot-zk-data:
+  pinot-zk-datalog:
+  pinot-controller-data:
+  pinot-server-data:
+  metastore-db-data:
 
 networks:
   finpulse-network:

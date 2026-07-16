@@ -88,6 +88,23 @@ smoke_airflow() {
     echo ""
 }
 
+smoke_pinot() {
+    step "Smoke tests for Pinot: controller + broker healthy, cluster registration"
+
+    $COMPOSE exec -T pinot-controller bash -c "
+        set -e
+        curl -fsS http://pinot-controller:9000/health | grep -q OK
+        curl -fsS http://pinot-broker:8099/health | grep -q OK
+    " >/dev/null || die "Pinot controller + broker are not healthy"
+    ok "Pinot controller + broker healthy"
+
+    out=$($COMPOSE exec -T pinot-controller \
+        curl -fsS http://pinot-controller:9000/instances 2>/dev/null)
+    echo "$out" | grep -q "Broker_pinot-broker_8099" || die "Broker not registered: $out"
+    echo "$out" | grep -q "Server_pinot-server_8098" || die "Server not registered: $out"
+    ok "Pinot broker + server registered with controller"
+}
+
 
 # Main case logic
 case ${1:-all} in
@@ -95,6 +112,7 @@ case ${1:-all} in
 	spark)  smoke_spark  ;;
     kafka)  smoke_kafka  ;;
     airflow)  smoke_airflow  ;;
-    all)  smoke_hdfs; smoke_spark; smoke_kafka; smoke_airflow ;;
+    pinot)  smoke_pinot  ;;
+    all)  smoke_hdfs; smoke_spark; smoke_kafka; smoke_airflow; smoke_pinot ;;
 	*)  echo "Usage: $0 [hdfs|spark|kafka|airflow|all]"; exit 2 ;;
 esac
