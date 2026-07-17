@@ -1,0 +1,37 @@
+{
+  "tableName": "transactions_scored",
+  "tableType": "REALTIME",
+  "segmentsConfig": {
+    "schemaName": "transactions_scored",
+    "timeColumnName": "event_time",
+    "replication": "1",
+    "retentionTimeUnit": "DAYS",
+    "retentionTimeValue": "365"
+  },
+  "tableIndexConfig": {
+    "loadMode": "MMAP",
+    "invertedIndexColumns": ["merchant_id", "country", "channel", "recommended_action"],
+    "rangeIndexColumns": ["risk_score", "amount"]
+  },
+  "ingestionConfig": {
+    "streamIngestionConfig": {
+      "streamConfigMaps": [
+      {
+        "streamType": "kafka",
+        "stream.kafka.topic.name": "transactions-scored",
+        "stream.kafka.broker.list": "kafka:9094",
+        "stream.kafka.consumer.type": "lowLevel",
+        "stream.kafka.consumer.factory.class.name": "org.apache.pinot.plugin.stream.kafka20.KafkaConsumerFactory",
+        "stream.kafka.consumer.prop.auto.offset.reset": "smallest",
+        "stream.kafka.decoder.class.name": "org.apache.pinot.plugin.inputformat.json.JSONMessageDecoder", 
+        "realtime.segment.flush.threshold.rows": "200000",
+        "realtime.segment.flush.threshold.time": "6h"
+      }]
+    }
+  },
+  "tenants": {
+    "broker": "DefaultTenant",
+    "server": "DefaultTenant"
+  },
+  "metadata": {}
+}

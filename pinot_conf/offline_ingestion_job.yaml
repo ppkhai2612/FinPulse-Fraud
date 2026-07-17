@@ -1,0 +1,38 @@
+executionFrameworkSpec:
+  name: 'standalone'
+  segmentGenerationJobRunnerClassName: 'org.apache.pinot.plugin.ingestion.batch.standalone.SegmentGenerationJobRunner'
+  segmentTarPushJobRunnerClassName: 'org.apache.pinot.plugin.ingestion.batch.standalone.SegmentTarPushJobRunner'
+  # segmentUriPushJobRunnerClassName: 'org.apache.pinot.plugin.ingestion.batch.standalone.SegmentUriPushJobRunner'
+  # segmentMetadataPushJobRunnerClassName: 'org.apache.pinot.plugin.ingestion.batch.standalone.SegmentMetadataPushJobRunner'
+
+# Recommended to set jobType to SegmentCreationAndMetadataPush for production environment where Pinot Deep Store is configured  
+jobType: SegmentCreationAndTarPush
+
+inputDirURI: 'file:///opt/pinot/data/pinot-offline/scored'
+includeFileNamePattern: 'glob:**/*.parquet'
+outputDirURI: 'file:///tmp/pinot_scored_segments'
+overwriteOutput: true
+
+pinotFSSpecs:
+  - scheme: file
+    className: org.apache.pinot.spi.filesystem.LocalPinotFS
+
+recordReaderSpec:
+  dataFormat: 'parquet'
+  className: 'org.apache.pinot.plugin.inputformat.parquet.ParquetRecordReader'
+
+tableSpec:
+  tableName: 'transactions_scored'
+
+pinotClusterSpecs:
+  - controllerURI: 'http://pinot-controller:9000'
+
+pushJobSpec:
+  pushAttempts: 2
+  pushRetryIntervalMillis: 1000
+
+segmentNameGeneratorSpec:
+  type: 'normalizedDate'
+  configs:
+    segment.name.prefix: 'transactions_scored_offline'
+    exclude.sequence.id: 'false'

@@ -1,0 +1,22 @@
+{
+  "tableName": "transactions_scored",
+  "tableType": "OFFLINE",
+  "segmentsConfig": {
+    "schemaName": "transactions_scored",
+    "timeColumnName": "event_time",
+    "replication": "1",
+    "segmentPushType": "APPEND",
+    "retentionTimeUnit": "DAYS",
+    "retentionTimeValue": "365"
+  },
+  "tableIndexConfig": {
+    "invertedIndexColumns": ["merchant_id", "country", "channel", "recommended_action"],
+    "rangeIndexColumns": ["risk_score", "amount"],
+    "loadMode": "MMAP"
+  },
+  "tenants": {
+    "broker": "DefaultTenant",
+    "server": "DefaultTenant"
+  },
+  "metadata": {}
+}
