@@ -105,6 +105,38 @@ smoke_pinot() {
     ok "Pinot broker + server registered with controller"
 }
 
+smoke_trino() {
+    step "Smoke tests for Trino: /v1/info + hive catalog + Spark<->HMS<->Trino round-trip"
+
+    # 1. Whether Trino coordinator is ready
+    $COMPOSE exec -T trino-coordinator bash -c '
+      curl -fsS http://localhost:8080/v1/info | grep -q "\"starting\":false"
+    ' >/dev/null || die "Trino coordinator is not ready"
+    ok "Trino coordinator is ready"
+
+    # 2. Whether the Hive catalog is missing
+    out=$($COMPOSE exec -T trino-coordinator trino \
+      --server localhost:8080 --execute 'SHOW CATALOGS' 2>/dev/null)
+    echo "$out" | grep -q '^"hive"$' || die "Hive catalog is missing from Trino: $out"
+    ok "Hive catalog registered"
+
+    # 3. Spark<->HMS<->Trino round trip
+    $COMPOSE exec -T spark-master bash -c '
+      /opt/spark/bin/spark-submit \
+        --master spark://spark-master:7077 \
+        /opt/spark/work-dir/jobs/smoke/smoke_trino.py
+    ' | tee /tmp/finpulse-smoke-trino.log >/dev/null \
+        || die "Spark job smoke_trino.py failed (see /tmp/finpulse-smoke-trino.log)"
+    grep -q 'smoke_trino OK' /tmp/finpulse-smoke-trino.log \
+        || die "smoke_trino.py ran but did not log 'smoke_trino OK'"
+
+    count=$($COMPOSE exec -T trino-coordinator trino \
+      --catalog hive --schema default \
+      --execute 'SELECT COUNT(*) FROM smoke_hms' 2>/dev/null \
+      | tr -d '"' | tail -1)
+    test "${count}" = "3" || die "Trino saw smoke_hms with $count rows, expected 3"
+    ok "Spark<->HMS<->Presto round-trip works"
+}
 
 # Main case logic
 case ${1:-all} in
@@ -113,6 +145,7 @@ case ${1:-all} in
     kafka)  smoke_kafka  ;;
     airflow)  smoke_airflow  ;;
     pinot)  smoke_pinot  ;;
-    all)  smoke_hdfs; smoke_spark; smoke_kafka; smoke_airflow; smoke_pinot ;;
+    trino)  smoke_trino  ;;
+    all)  smoke_hdfs; smoke_spark; smoke_kafka; smoke_airflow; smoke_pinot; smoke_trino  ;;
 	*)  echo "Usage: $0 [hdfs|spark|kafka|airflow|all]"; exit 2 ;;
 esac

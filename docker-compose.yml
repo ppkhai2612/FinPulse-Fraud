@@ -191,9 +191,9 @@ services:
   #   networks:
   #     - finpulse-network
 
-  producer:
+  kafka-producer:
     image: python:3.11-slim-bullseye
-    container_name: producer
+    container_name: kafka-producer
     volumes: 
       - ./kafka_producers:/opt/producers
       - ./data:/opt/data
@@ -207,6 +207,9 @@ services:
     networks:
       - finpulse-network
     restart: unless-stopped
+
+  # ===Airflow===
+
 
   # ===Pinot===
   pinot-zookeeper:
@@ -372,8 +375,7 @@ services:
           /opt/hive/bin/schematool -dbType postgres -initSchema --verbose
         fi
         # ensure the HDFS /warehouse root exists
-        /opt/hadoop/bin/hdfs dfs -mkdir -p /warehouse 2>/dev/null || \
-          /opt/hadoop/bin/hdfs dfs -mkdir -p /warehouse 2>/dev/null || true
+        /opt/hadoop/bin/hdfs dfs -mkdir -p /warehouse 2>/dev/null || true
         echo "HMS init completed"
     depends_on:
       metastore-db:
@@ -417,7 +419,55 @@ services:
       retries: 12
       start_period: 30s
 
+  # ===Trino===
+  trino-coordinator:
+    image: trinodb/trino:481
+    container_name: trino-coordinator
+    user: root
+    ports:
+      - "8086:8080"
+    volumes:
+      - ./docker/trino_etc:/etc/trino
+      - ./docker/hadoop-client:/etc/hadoop/conf
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+      namenode:
+        condition: service_healthy
+    networks:
+      - finpulse-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/v1/info | grep -q '\"starting\":false'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
+  # ===Apache Superset===
+  superset:
+    image: apache/superset:4.1.1
+    container_name: superset
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: dev-secret-change-me
+      SUPERSET_LOAD_EXAMPLES: "no"
+      SQLALCHEMY_DATABASE_URI: "sqlite:////app/superset_home/superset.db"
+      PYTHONPATH: "/app/pythonpath:/app/superset_home/.local/lib/python3.10/site-packages"
+    volumes:
+      - superset-data:/app/superset_home
+    networks:
+      - finpulse-network
+    restart: "no"
+    # Initialize the database and admin user
+    entrypoint: >
+      /bin/sh -c "
+      pip install --no-cache-dir pinotdb pyhive[trino] &&
+      superset db upgrade &&
+      superset fab create-admin --username ${SUPERSET_ADMIN_USER} --firstname Admin --lastname User --email admin@finpulse.local --password ${SUPERSET_ADMIN_PASSWORD} &&
+      superset init &&
+      gunicorn -w 2 --timeout 120 -b 0.0.0.0:8088 --limit-request-line 0 --limit-request-field_size 0 'superset.app:create_app()'
+      "
 
 volumes:
   namenode-data:
@@ -429,6 +479,8 @@ volumes:
   pinot-controller-data:
   pinot-server-data:
   metastore-db-data:
+  superset-data:
+
 
 networks:
   finpulse-network:

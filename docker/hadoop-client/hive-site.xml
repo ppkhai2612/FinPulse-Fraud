@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<configuration>
+  <!--
+    Spark sees this file via HADOOP_CONF_DIR=/opt/hadoop/conf. When
+    spark.sql.catalogImplementation=hive (in spark-defaults.conf),
+    Spark uses this URI to register tables in HMS, so Trino can read them
+  -->
+  <property>
+    <name>hive.metastore.uris</name>
+    <value>thrift://hive-metastore:9083</value>
+  </property>
+</configuration>
