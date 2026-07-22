@@ -85,8 +85,25 @@ smoke_kafka() {
 
 
 smoke_airflow() {
-    echo ""
+    step "Smoke tests for Airflow: trigger smoke_dag and wait for success"
+
+    $COMPOSE exec -T airflow-apiserver bash -c '
+      set -e
+      airflow dags unpause smoke_dag >/dev/null
+      airflow dags trigger smoke_dag >/dev/null
+      # `airflow dags list-runs --output plain` columns:
+      # 1=dag_id  2=run_id  3=state  4=execution_date  5=start_date  6=end_date
+      for i in $(seq 1 30); do
+        state=$(airflow dags list-runs --output plain smoke_dag 2>/dev/null | awk "NR==2 {print \$3}")
+        if [ "$state" = "success" ]; then echo "success"; exit 0; fi
+        if [ "$state" = "failed" ]; then echo "failed"; exit 1; fi
+        sleep 2
+      done
+      echo "timeout"; exit 1
+    ' || die "smoke_dag ran failed to run"
+    ok "smoke_dag has run successfully"
 }
+
 
 smoke_pinot() {
     step "Smoke tests for Pinot: controller + broker healthy, cluster registration"
@@ -104,6 +121,7 @@ smoke_pinot() {
     echo "$out" | grep -q "Server_pinot-server_8098" || die "Server not registered: $out"
     ok "Pinot broker + server registered with controller"
 }
+
 
 smoke_trino() {
     step "Smoke tests for Trino: /v1/info + hive catalog + Spark<->HMS<->Trino round-trip"
@@ -137,6 +155,7 @@ smoke_trino() {
     test "${count}" = "3" || die "Trino saw smoke_hms with $count rows, expected 3"
     ok "Spark<->HMS<->Presto round-trip works"
 }
+
 
 # Main case logic
 case ${1:-all} in
