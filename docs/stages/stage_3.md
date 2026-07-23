@@ -2,8 +2,8 @@
 
 ## Tasks
 
-- Design Kafka topics for the company’s streaming data sources /
-- Build a producer that simulates real-time events from your scenario /
+- Design Kafka topics for the company’s streaming data sources
+- Build a producer that simulates real-time events from your scenario
 - Implement Spark Structured Streaming consumers
 - Apply windowed aggregations and/or real-time alerting logic
 - Decide and justify your architecture: Lambda (batch + stream) or Kappa (stream only)
@@ -13,7 +13,7 @@
 ### Running Kafka producer
 
 - Create a Kafka topic in `kafka` container to store messages: `docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9094 --create --if-not-exists --topic transactions --partitions 6 --replication-factor 1 --config retention.ms=-1 --config segment.bytes=104857600`
-- Run a Kafka producer (Python app) to simulate real-time events from transaction data: `docker compose exec producer python /opt/producers/transaction_producer.py --rate 5000`
+- Run a Kafka producer (Python app) to simulate real-time events from transaction data: `docker compose exec kafka-producer python /opt/producers/transaction_producer.py --rate 5000`
 
     ```bash
     Sent 1000 messages in 0.2s (4904 msg/s)
@@ -136,3 +136,12 @@
     {"txn_id":"TXN-0316394","card_id":"CARD-004729","event_time":"2025-02-01T12:20:01.000Z","amount":542.22,"risk_score":2,"triggered_rules":"high_amount,high_risk_merchant","recommended_action":"review"}
     {"txn_id":"TXN-0996763","card_id":"CARD-075893","event_time":"2025-01-30T20:41:37.000Z","amount":298.01,"risk_score":2,"triggered_rules":"high_amount,high_risk_merchant","recommended_action":"review"}
     ```
+
+
+
+Content in `docker compose exec -T namenode hdfs dfs -cat /checkpoints/finpulse-stream-score/offsets/0`
+
+```bash
+{"batchWatermarkMs":0,"batchTimestampMs":1784280404424,"conf":{"spark.sql.streaming.stateStore.providerClass":"org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider","spark.sql.streaming.stateStore.rocksdb.formatVersion":"5","spark.sql.streaming.stateStore.encodingFormat":"unsaferow","spark.sql.streaming.statefulOperator.useStrictDistribution":"true","spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion":"2","spark.sql.streaming.multipleWatermarkPolicy":"min","spark.sql.streaming.aggregation.stateFormatVersion":"2","spark.sql.shuffle.partitions":"200","spark.sql.streaming.join.stateFormatVersion":"2","spark.sql.streaming.stateStore.compression.codec":"lz4","spark.sql.optimizer.pruneFiltersCanPruneStreamingSubplan":"false"}}
+{"transactions":{"0":165639,"1":170428,"2":164850,"3":165588,"4":167799,"5":165696}}
+```
