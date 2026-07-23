@@ -361,7 +361,8 @@ def main() -> None:
         .where(col("txn_id").isNotNull())
         .withColumn("event_time", to_timestamp(col("timestamp")))
         .where(col("event_time").isNotNull())
-        .withWatermark("event_time", "2 minutes") # define event time watermark for transactions
+        # Watermark for handling late data: dropped if event_time is older than 2 mins relative to max event_time seen so far
+        .withWatermark("event_time", "2 minutes")
         .select(
             "txn_id",
             "card_id",
@@ -375,7 +376,8 @@ def main() -> None:
     )
 
     query = (
-        transactions.writeStream.foreachBatch(score_batch) # called for each micro-batch
+        # called for each micro-batch (trigger not specified, defaults to as fast as possible)
+        transactions.writeStream.foreachBatch(score_batch)
         .option("checkpointLocation", CHECKPOINT_DIR) # checkpoint directory for recovering from failures
         .queryName(APP_NAME) # unique query name in the associated SparkSession
         .start()
