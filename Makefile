@@ -4,14 +4,19 @@ COMPOSE = docker compose
 HIVE_PG_JAR_VERSION = 42.7.2
 HIVE_PG_JAR_PATH = docker/hive-metastore/jars/postgresql-$(HIVE_PG_JAR_VERSION).jar
 
-.PHONY: up-core down down-volume smoke smoke-hdfs smoke-spark
+# .PHONY: up-core down down-volume smoke smoke-hdfs smoke-spark
+
+up:
+	${COMPOSE} up -d
 
 up-core:
-	${COMPOSE} up -d namenode datanode-1 datanode-2 spark-master spark-worker-1 kafka
+	${COMPOSE} up -d namenode datanode-1 datanode-2 spark-master spark-worker-1 kafka kafka-producer
 
 up-bi:
-	${COMPOSE} up -d pinot-zookeeper pinot-controller pinot-broker pinot-server
-		superset
+	${COMPOSE} up -d pinot-zookeeper pinot-controller pinot-broker pinot-server superset
+
+up-airflow:
+	${COMPOSE} up postgres airflow-init airflow-apiserver airflow-scheduler airflow-dag-processor
 
 down:
 	${COMPOSE} down
@@ -19,8 +24,13 @@ down:
 down-volume:
 	${COMPOSE} down -v
 
+down-airflow:
+	${COMPOSE} down postgres airflow-init airflow-apiserver airflow-scheduler airflow-dag-processor
 
-smoke: smoke-hdfs smoke-spark smoke-kafka smoke-pinot smoke-trino
+down-spark:
+	${COMPOSE} down spark-master spark-worker-1
+
+smoke: smoke-hdfs smoke-spark smoke-kafka smoke-airflow smoke-pinot smoke-trino
 
 smoke-hdfs:
 	@bash scripts/smoke.sh hdfs
@@ -61,16 +71,11 @@ up-pinot:
 up-dwh:
 	${COMPOSE} up metastore-db hive-metastore-init hive-metastore
 
+up-superset:
+	${COMPOSE} up -d superset
 
-
-curate-jobs:
-	${COMPOSE} exec spark-master /opt/spark/bin/spark-submit \
-    --master spark://spark-master:7077 \
-    path_to_python_file`
-
-	${COMPOSE} exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0 /opt/spark/work-dir/jobs/enrich/build_enriched_fact.py
-	docker compose exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark/work-dir/jobs/enrich/check_fraud_rate.py`
-	docker compose exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark/work-dir/jobs/features/build_customer_features.py
+down-pinot:
+	${COMPOSE} down pinot-zookeeper pinot-controller pinot-broker pinot-server
 
 
 hive-deps:
