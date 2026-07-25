@@ -23,7 +23,13 @@ Two Airflow DAGs are defined in `airflow/dags`, one for the batch pipeline and o
         - **Data quality gate**: check if the predicted fraud rate is within the acceptable range; if it's okay, the downstream tasks will be run, otherwise they will be skipped
         - **Spark export Pinot job**: export scored transactions to shared files, So, Pinot will be able to ingest data into its server
         - **Pinot batch ingestion job**: ingest batch data into Pinot tables and segments
-        - **Spark register HMS job**:
+        - **Spark register HMS job**: register files in `curated/` and `analytics/` to Hive Metastore, so, Trino can query them as table abstraction
 
 - **Streaming Monitor DAG**
 
+    - Runs every 15 minutes
+    - Three tasks that checking
+
+        - The Spark Structured Streaming application is RUNNING
+        - Its checkpoint directory is fresh (micro-batches are still committing)
+        - The transactions-scored topic is non-empty (the scorer is producing)

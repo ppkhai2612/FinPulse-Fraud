@@ -159,9 +159,6 @@ curl -fsS -X POST http://localhost:8099/query/sql \
 }
 ```
 
-
-
-
 ## Trino
 
 According to [this document](https://trino.io/docs/current/connector/hive.html#requirements), for Trino to be able to query data contained in the Apache Hive data warehouse, it needs:
@@ -169,7 +166,6 @@ According to [this document](https://trino.io/docs/current/connector/hive.html#r
 - Metadata about how the data files are mapped to schemas and tables. This metadata is stored in a database, such as MySQL, and is accessed via the Hive metastore service
 
 In this project, Trino will query files in `curated/*` and `analytics/*`, so these files will be wrapped by the metadata contained in the Hive Metastore
-
 
 ## Hive Metastore
 
@@ -190,9 +186,11 @@ In this project, Trino will query files in `curated/*` and `analytics/*`, so the
 
 The plan sketches two ways to register tables - saveAsTable from Spark or CREATE EXTERNAL TABLE from the Presto CLI. 
 
+```bash
 docker compose exec spark-master /opt/spark/bin/spark-submit \
     --master spark://spark-master:7077 \
     /opt/jobs/warehouse/register_hms_tables.py
+```
 
 ```bash
 Registered curated.customer_profiles: 100000 rows
@@ -255,16 +253,20 @@ LIMIT 5"
 "online_marketplace","559"
 ```
 
-
 ## Superset
 
+### Registering databases and datasets in Superset
+
+```bash
 docker compose cp docker/superset/register_superset.py superset:/app/register_superset.py
 docker compose exec superset python /app/register_superset.py
+```
 
+### Dashboards
 
-Dashboard 1 - Live fraud-rate monitor (Pinot)
-Dataset: transactions_scored (Pinot). Set the dashboard auto-refresh to 10s. Charts:
+Dashboard 1 - Live fraud-rate monitor (Pinot). Dataset: `transactions_scored` (Pinot). Set the dashboard auto-refresh to 10s. Charts:
 
+```sql
 -- Fraud rate, last 60 minutes (Big Number)
 SELECT CAST(SUM(CASE WHEN predicted_fraud THEN 1 ELSE 0 END) AS DOUBLE)
        / count(*) AS fraud_rate
@@ -276,19 +278,22 @@ SELECT recommended_action, count(*)
 FROM transactions_scored
 GROUP BY recommended_action;
 Pinot wins here: sub-second on a fixed schema, refreshed every few seconds.
+```
 
-Dashboard 2 - Per-rule trigger analysis (Pinot)
-Dataset: transactions_scored (Pinot). One Big Number / bar per rule:
+Dashboard 2 - Per-rule trigger analysis (Pinot). Dataset: transactions_scored (Pinot). One Big Number / bar per rule:
 
+```sql
 SELECT
   SUM(CASE WHEN rule_high_amount        THEN 1 ELSE 0 END) AS high_amount,
   SUM(CASE WHEN rule_velocity           THEN 1 ELSE 0 END) AS velocity,
-  SUM(CASE WHEN rule_intl_mismatch      THEN 1 ELSE 0 END) AS intl_mismatch,
+  SUM(CASE WHEN rule_international_mismatch      THEN 1 ELSE 0 END) AS international_mismatch,
   SUM(CASE WHEN rule_high_risk_merchant THEN 1 ELSE 0 END) AS high_risk_merchant
 FROM transactions_scored;
-Dashboard 3 - Cross-segment fraud breakdown (Presto)
-Dataset: transactions_enriched (Presto), joined to merchant_directory and customer_profiles. This is the free-form, multi-table drill-down Pinot cannot serve:
+```
 
+Dashboard 3 - Cross-segment fraud breakdown (Presto). Dataset: `transactions_enriched` (Presto), joined to `merchant_directory` and `customer_profiles`. This is the free-form, multi-table drill-down Pinot cannot serve:
+
+```sql
 SELECT m.category,
        t.country,
        count(*)                                            AS txns,
@@ -300,5 +305,6 @@ JOIN curated.merchant_directory m ON t.merchant_id = m.merchant_id
 GROUP BY m.category, t.country
 ORDER BY fraud_rate DESC
 LIMIT 50;
-Export each finished dashboard (Settings -> Dashboards -> ... -> Export) to docker/superset/dashboards/ so they re-import on a fresh stack.
+```
 
+Export each finished dashboard (Settings -> Dashboards -> ... -> Export) to docker/superset/dashboards/ so they re-import on a fresh stack.

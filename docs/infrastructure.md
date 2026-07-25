@@ -9,8 +9,8 @@ This documentation explains the services and containers in `docker-compose.yml`
 HDFS dim joins + Pinot offline-segment generation
 - **Kafka (single broker, KRaft)** — source of truth for the transaction fact stream. Three topics: transactions, transactions-scored, fraud-alerts
 - **Pinot (zookeeper + controller + broker + server)** — real-time OLAP serving layer; will host the transactions_scored hybrid table (pre-aggregated, real-time from Kafka + offline from HDFS)
-- **Hive Metastore + Trino (metastore-db + hive-metastore + trino-coordinator)** — DWH serving layer for the granular Parquet in /curated/* and /analytics/*. Spark saveAsTable registers tables in HMS over Thrift; Trino reads them via the Hive connector
-Superset — BI front-end on Pinot (pinotdb) and Trino (pyhive[Trino]) via two separate SQLAlchemy drivers
+- **Hive Metastore + Trino (metastore-db + hive-metastore + trino-coordinator)** — DWH serving layer for the granular Parquet in `/curated/*` and `/analytics/*`. Spark saveAsTable registers tables in HMS over Thrift; Trino reads them via the Hive connector
+Superset — BI front-end on Pinot (`pinotdb`) and Trino (`pyhive[Trino]`) via two separate SQLAlchemy drivers
 - **Airflow (LocalExecutor)** — orchestrates the daily Spark batch DAG and monitors the long-running Spark-Structured Streaming job
 
 ## HDFS - Distributed File System
@@ -135,12 +135,7 @@ This combination brings a DWH serving layer for ad-hoc SQL queries against Parqu
 | `metastore-db` | HMS requires a RDBMS to persist the Hive object definitions such as databases, tables, and functions. In this project setup, Postgres is used with a database named `metastore`. |
 | `hive-metastore-init` | one-shot, idempotent - runs schematool only if the schema doesn't already exist. Mirrors the airflow-init / superset-init pattern. |
 | `hive-metastore` | long-running Thrift server on `:9083` (Spark or Trino ping it). |
-|||
-|||
-|||
-
- 
-
+| `trino-coordinator` | DWH serving layer — query granular Parquet files via Hive Metastore |
 
 ## Airflow - Orchestration Platform
 
@@ -172,4 +167,4 @@ Some essential configurations include environment variables and bind mounts
 
 > **IMPORTANT**: `user: "50000:0"` runs all Airflow processes as UID 50000 (the default Airflow image user) with GID 0, which avoids permission errors when writing to the bind-mounted `airflow/logs/` directory on the host. The host UID isn't used because the bind-mount permission model with GID 0 + the official entrypoint covers it
 
-sudo chmod -R 777 airflow/
+`sudo chmod -R 777 airflow/`

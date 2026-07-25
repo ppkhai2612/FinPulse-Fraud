@@ -13,7 +13,7 @@
 ### Running Kafka producer
 
 - Create a Kafka topic in `kafka` container to store messages: `docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9094 --create --if-not-exists --topic transactions --partitions 6 --replication-factor 1 --config retention.ms=-1 --config segment.bytes=104857600`
-- Run a Kafka producer (Python app) to simulate real-time events from transaction data: `docker compose exec kafka-producer python /opt/producers/transaction_producer.py --rate 5000`
+- Run a Kafka producer (Python app) to simulate real-time events from transaction data: `docker compose exec kafka-producer python /opt/producers/transaction_producer.py --rate 200`
 
     ```bash
     Sent 1000 messages in 0.2s (4904 msg/s)
