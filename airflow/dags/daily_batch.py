@@ -2,11 +2,7 @@ from datetime import datetime, timedelta
 
 import requests
 from airflow.sdk import dag, task
-# from airflow.sdk.exceptions import AirflowSkipException
-from airflow.providers.standard.operators.bash import BashOperator
-
 from finpulse_lib import run_in, spark_submit
-
 
 KAFKA_PACKAGE = "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0"
 
@@ -65,7 +61,7 @@ def daily_batch():
     def ingest_pinot_offline():
         run_in("pinot-controller", [
             "./bin/pinot-admin.sh", "LaunchDataIngestionJob",
-            "-jobSpecFile", "/opt/pinot-offline/offline_ingestion_job.yaml",
+            "-jobSpecFile", "/opt/pinot/data/pinot-offline/offline_ingestion_job.yaml",
         ])
 
     @task.short_circuit
@@ -94,8 +90,14 @@ def daily_batch():
             print("OUT OF BAND - short-circuiting publish")
         return ok
 
-    
+    @task
+    def register_hms():
+        run_in("spark-master", spark_submit(
+        "/opt/spark/work-dir/jobs/warehouse/register_hms_tables.py"))
 
+    @task
+    def print_publish_info():
+        print("daily_batch published: Pinot offline segments + HMS tables refreshed")
 
     # Curate dimensions (dynamic task mapping)
     curates = [
@@ -109,11 +111,13 @@ def daily_batch():
     export = export_pinot_offline()
     ingest = ingest_pinot_offline()
     gate = quality_gate()
+    register = register_hms()
+    publish = print_publish_info()
 
     (
         curates >> enrich >> features >> scoring
         >> export >> ingest
-        >> gate
+        >> gate >> register >> publish
     )
 
 
