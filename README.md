@@ -4,6 +4,10 @@ Fraud detection & transaction analytics on a HDFS / Spark / Kafka / Spark Struct
 
 ## Architecture
 
+![](images/architecture.png)
+
+## Data Flow Diagram
+
 ```mermaid
 flowchart LR
     subgraph Sources["Source data"]
@@ -105,8 +109,6 @@ FinPulse follows a Lambda-style data architecture:
 - **Realtime path:** a Kafka producer streams raw transactions into `transactions`; Spark Structured Streaming enriches each micro-batch with customer and merchant feature topics, computes fraud rules, emits scored transactions and fraud alerts, and persists stream state/checkpoints in HDFS.
 - **Serving path:** Trino serves granular warehouse tables from HDFS/HMS, while Pinot serves the `transactions_scored` hybrid OLAP table from offline Parquet exports plus realtime Kafka messages. Superset connects to both serving layers.
 - **Orchestration:** Airflow runs the daily batch DAG and monitors the long-running streaming scorer.
-
-**For better viewing, please export to a PNG or SVG file**
 
 ## Data
 
