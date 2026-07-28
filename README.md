@@ -317,6 +317,17 @@ Remove containers and volumes for a clean reset:
 docker compose down -v
 ```
 
+## Makefile
+
+| Target | What is does? |
+|-|-|
+| `make up` | Start the full stack |
+| `make up-core` | HDFS + Spark + Kafka only |
+| `make up-stream` | One-time: download Postgres JDBC driver to `docker/hive-metastore/jars/` |
+| `make up-bi` | Pinot + Superset + HMS + Presto |
+| `make down`| Stop containers, keep volumes |
+| `make down-volume` | Stop and delete all volumes |
+
 ## References
 
 - [Data architecture 101](https://vutr.substack.com/p/data-architecture-101)
