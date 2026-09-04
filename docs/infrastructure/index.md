@@ -1,6 +1,19 @@
-# FinPulse-Fraud Infrastructure
+# Infrastructure reference
 
-This documentation explains the services and containers in `docker-compose.yml`
+Per-component reference for every service in [docker-compose.yml](../../docker-compose.yml) — image, ports, volumes, configuration, healthcheck, and the why behind each non-obvious choice. It answers **"how is component X wired?"**
+
+## Components
+
+| **Doc** | **What is covers** | **Compose services** |
+|-|-|-|
+| hdfs.md |||
+||||
+||||
+||||
+||||
+||||
+||||
+||||
 
 ## Overview
 

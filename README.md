@@ -317,6 +317,12 @@ Remove containers and volumes for a clean reset:
 docker compose down -v
 ```
 
+## First-time bring-up
+
+```bash
+
+```
+
 ## Makefile
 
 | Target | What is does? |
