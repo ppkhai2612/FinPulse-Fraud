@@ -89,3 +89,7 @@ Web UI: http://localhost:9870. The "Datanodes" tab is the fastest way to confirm
 ```bash
 make smoke-hdfs # put / ls / cat / rm round-trip via the NN container
 ```
+
+## References
+
+- [The Hadoop Distributed File System](https://vutr.substack.com/p/i-spent-8-hours-reading-the-paper-523)

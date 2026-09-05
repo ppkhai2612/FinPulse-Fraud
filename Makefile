@@ -19,7 +19,7 @@ up-bi: up-pinot up-superset up-hms up-trino
 down:
 	${COMPOSE} down
 
-down-volume:
+nuke:
 	${COMPOSE} down -v
 
 # --- SMOKE ---

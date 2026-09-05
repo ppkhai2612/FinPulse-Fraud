@@ -1,6 +1,6 @@
 # Infrastructure reference
 
-Per-component reference for every service in [docker-compose.yml](../../docker-compose.yml) — image, ports, volumes, configuration, healthcheck, and the why behind each non-obvious choice. It answers **"how is component X wired?"**
+Per-component reference for every service in [docker-compose.yml](../../docker-compose.yml) - image, ports, volumes, configuration, healthcheck, and the why behind each non-obvious choice. It answers **"how is component X wired?"**
 
 ## Components
 
@@ -26,50 +26,8 @@ HDFS dim joins + Pinot offline-segment generation
 Superset — BI front-end on Pinot (`pinotdb`) and Trino (`pyhive[Trino]`) via two separate SQLAlchemy drivers
 - **Airflow (LocalExecutor)** — orchestrates the daily Spark batch DAG and monitors the long-running Spark-Structured Streaming job
 
-## HDFS - Distributed File System
 
-### Containers
 
-| Container | Role |
-|-|-|
-| `namenode` | Managing the file system namespace and regulates access to files by clients |
-| `datanode-1`/`datanode-2` | Managing storage attached to the nodes that they run on |
-
-### Configurations
-
-The configurations for the HDFS cluster are defined in `docker/hadoop-server`, consisting of 2 files
-
-`core-site.xml`
-
-| Property | Value | Description |
-|-|-|-|
-| `fs.defaultFS` | `hdfs://namenode:9000` | The name of the default file system |
-
-`hdfs-site.xml`
-
-| Property | Value | Description |
-|-|-|-|
-| `dfs.replication` | 2 | Default block replication |
-| `dfs.permissions.enabled` | `false` | Turn off permission checking |
-| `dfs.client.use.datanode.hostname` | `true` | Clients use datanode hostnames when connecting to datanodes |
-| `dfs.namenode.rpc-address` | `namenode:9000` | RPC address that handles all clients requests |
-| `dfs.namenode.name.dir` | `file:///hadoop/dfs/name` | Determines where on the local filesystem the DFS name node should store the name table (fsimage) |
-| `dfs.namenode.datanode.registration.ip-hostname-check` | `false` | The namenode allows connections from datanodes without requiring their IP addresses to be resolved to hostnames |
-| `dfs.datanode.data.dir` | `file:///hadoop/dfs/data` | Determines where on the local filesystem an DFS data node should store its blocks |
-
-## Spark - Distributed Compute Engine
-
-Spark is deployed with 1 master (`spark-master`) and 2 workers (`spark-worker-1` and `spark-worker-2`)
-- **Spark master** acquiring resources on the cluster
-- **Spark workers** run application code in the cluster
-
-All Spark jobs in this project are deployed in **client mode** (the driver remains on the client machine that submitted the application) with Spark Standalone cluster manager
-
-To enable **Spark to read and write from HDFS**
-- Set `HADOOP_CONF_DIR` to a location containing the configuration files (e.g., `/etc/hadoop/conf`)
-- Add two Hadoop configuration files (in [hadoop-client/](../../docker/hadoop-client/)) to Spark's classpath
-    - `hdfs-site.xml`, which provides default behaviors for the HDFS client
-    - `core-site.xml`, which sets the default filesystem name
 
 ## Kafka - Distributed Event Streaming Platform
 
@@ -135,20 +93,6 @@ A few notes regarding infrastructure configuration
         - **Metric**: these columns represent the quantitative data of the table. Such columns are used for aggregation
         - **DateTime**: this column represents time columns in the data
 
-## HDFS + HMS + Trino - DWH serving layer for the granular ad-hoc SQL
-
-This combination brings a DWH serving layer for ad-hoc SQL queries against Parquet files in `/curated` and `/analytics` (stored in HDFS). It allows end users to answer business questions. Detailed sample questions are listed at `notebooks/analysis.ipynb`
-
-### Containers
-
-> **Note**: The HDFS cluster has already been explained in the "HDFS" section, so it will not be repeated here (only HMS and Trino mentioned)
-
-| Container | Role |
-|-|-|
-| `metastore-db` | HMS requires a RDBMS to persist the Hive object definitions such as databases, tables, and functions. In this project setup, Postgres is used with a database named `metastore`. |
-| `hive-metastore-init` | one-shot, idempotent - runs schematool only if the schema doesn't already exist. Mirrors the airflow-init / superset-init pattern. |
-| `hive-metastore` | long-running Thrift server on `:9083` (Spark or Trino ping it). |
-| `trino-coordinator` | DWH serving layer — query granular Parquet files via Hive Metastore |
 
 ## Airflow - Orchestration Platform
 

@@ -130,3 +130,7 @@ Master UI: http://localhost:8080. Workers list themselves there; each running ap
 ```bash    
 make smoke-spark   # spark-submit a job that reads HDFS
 ```
+
+## References
+
+- [The Overview Of Apache Spark](https://vutr.substack.com/p/the-overview-of-apache-spark)
