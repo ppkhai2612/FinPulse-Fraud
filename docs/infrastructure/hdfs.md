@@ -57,6 +57,12 @@ depends_on:
 
 So they only start once the NN web UI is responsive, and their own liveness is observable via the NN's "Datanodes" tab
 
+### Caveats
+
+- **Don't put `transactions.csv.gz` in HDFS**. Transactions are Kafka-only. Spark batch-reads the topic by offset range and writes the enriched result back to `/analytics/transactions_enriched`, but there is no `/landing/transactions/` or `/curated/transactions/`.
+- **NN format is one-shot**. The bash entrypoint runs `hdfs namenode -format` only if `/hadoop/dfs/name/current` is missing. If you ever need to re-format without `make nuke`, delete that directory inside the volume manually - naive image restarts won't do it.
+- **Permissions are off**. Anything in HDFS is world-readable from inside the docker network. Don't put production credentials in here.
+
 ## Alternatives
 
 | **System** | **What is it** | **Pick instead when...** |
@@ -66,3 +72,20 @@ So they only start once the NN web UI is responsive, and their own liveness is o
 | **Google Cloud Storage** / **Azure Blob Storage** | Cloud object stores | You're in GCP / Azure. Same shape as S3. |
 
 **In the modern systems, HDFS is rarely chosen. S3-compatible object storage has won**. I use HDFS here because the class rubric mandates the Hadoop ecosystem; in production, swap to S3/MinIO and most of this stack (Spark, Flink, Pinot offline segments, and PrestoDB via the Hive connector's `s3a://` reader) keeps working with a one-line config change.
+
+## Common commands
+
+Run against the NameNode container - it ships the full Hadoop client.
+
+```bash
+docker compose exec namenode hdfs dfs -ls /
+docker compose exec namenode hdfs dfs -mkdir -p /landing/customer-profiles
+docker compose exec namenode hdfs dfs -put /tmp/foo.json /landing/customer-profiles/
+docker compose exec namenode hdfs dfs -du -h /
+```
+
+Web UI: http://localhost:9870. The "Datanodes" tab is the fastest way to confirm both DNs have registered.
+
+```bash
+make smoke-hdfs # put / ls / cat / rm round-trip via the NN container
+```
