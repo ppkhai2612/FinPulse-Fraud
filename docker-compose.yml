@@ -105,10 +105,10 @@ services:
       - 7077:7077 # Spark master RPC port
       - 8080:8080 # Spark master web UI port
     environment:
-      - HADOOP_CONF_DIR=/etc/hadoop/conf
+      - HADOOP_CONF_DIR=/opt/hadoop-conf
       - SPARK_NO_DAEMONIZE=true # run Spark master in the foreground
     volumes:
-      - ./docker/hadoop-client:/etc/hadoop/conf
+      - ./docker/hadoop-client:/opt/hadoop-conf
       - ./docker/spark:/opt/spark/conf
       - ./spark_jobs:/opt/spark/work-dir/jobs
       - ./pinot-offline:/opt/pinot-offline
@@ -132,10 +132,10 @@ services:
     networks:
       - finpulse-network
     environment:
-      - HADOOP_CONF_DIR=/etc/hadoop/conf
+      - HADOOP_CONF_DIR=/opt/hadoop-conf
       - SPARK_NO_DAEMONIZE=true
     volumes:
-      - ./docker/hadoop-client:/etc/hadoop/conf
+      - ./docker/hadoop-client:/opt/hadoop-conf
       - ./docker/spark:/opt/spark/conf
       - ./spark_jobs:/opt/spark/work-dir/jobs
       - ./pinot-offline:/opt/pinot-offline
@@ -159,10 +159,10 @@ services:
     networks:
       - finpulse-network
     environment:
-      - HADOOP_CONF_DIR=/etc/hadoop/conf
+      - HADOOP_CONF_DIR=/opt/hadoop-conf
       - SPARK_NO_DAEMONIZE=true
     volumes:
-      - ./docker/hadoop-client:/etc/hadoop/conf
+      - ./docker/hadoop-client:/opt/hadoop-conf
       - ./docker/spark:/opt/spark/conf
       - ./jobs:/opt/spark/work-dir/jobs
       - ./pinot-offline:/opt/pinot-offline
@@ -654,6 +654,10 @@ services:
       retries: 5
       start_period: 90s   # gunicorn cold start + pip-install pinotdb on first run
     restart: unless-stopped
+
+
+  # ===Apache Flink===
+  
 
 
 volumes:

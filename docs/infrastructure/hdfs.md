@@ -12,7 +12,28 @@ NameNode `:9870` is the web UI, `:9000` is the RPC port that `fs.defaultFS=hdfs:
 
 ## Configuration
 
+Hadoop config is bind-mounted XML:
+
+| **File** | **Mounted into** | **Purpose** |
+|-|-|-|
+| [`hadoop-server/core-site.xml`](../../docker/hadoop-server/core-site.xml) | NN + DN-1 + DN-2 at `/opt/hadoop/etc/hadoop/` | `fs.defaultFS`, `hadoop.tmp.dir` |
+| [`hadoop-server/hdfs-site.xml`](../../docker/hadoop-server/hdfs-site.xml) | NN + DN-1 + DN-2 at `/opt/hadoop/etc/hadoop/` | replication, name/data dirs, NN address, permission off |
+| [`hadoop-client/core-site.xml`](../../docker/hadoop-client/core-site.xml) | Spark master + workers + Flink jm/tm at `/opt/hadoop-conf/` | minimal client side: `fs.defaultFS=hdfs://namenode:9000` |
+| [`hadoop-client/hdfs-site.xml`](../../docker/hadoop-client/hdfs-site.xml) | Spark master + workers + Flink jm/tm at `/opt/hadoop-conf/` | client-side block-access defaults |
+
+When you change cluster-wide HDFS settings, edit the server files and restart the affected NN/DN containers. The client-side files are intentionally minimal - they exist only so Spark and Flink know where the NameNode is via `HADOOP_CONF_DIR=/opt/hadoop-conf`
+
+`dfs.replication` is set to 2 (we run 2 DataNodes); the audit-grade dim datasets (`fraud-reports`, `customer-profiles`) to be written with replication 3 at write time
+
 ## Volumes
+
+| **Volume** | **Mount path** | **What's persisted** |
+|-|-|-|
+| `namenode-data` | NN: `/hadoop/dfs/name` | NameNode metadata (inode, fsimage, edit log) |
+| `datanode1-data` | DN-1: `/hadoop/dfs/data` | DataNode block storage |
+| `datanode2-data` | DN-2: `/hadoop/dfs/data` | DataNode block storage |
+
+The NameNode bash entrypoint formats `/hadoop/dfs/name` only when it doesn't already contain a `current/` subdirectory, so a normal restart preserves the cluster ID and existing blocks. After `make nuke`, the next bring-up formats fresh with cluster ID `finpulse`
 
 ## Healthcheck
 
