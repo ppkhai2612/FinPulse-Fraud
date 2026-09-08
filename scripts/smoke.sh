@@ -108,6 +108,9 @@ smoke_airflow() {
 smoke_pinot() {
     step "Smoke tests for Pinot: controller + broker healthy, cluster registration"
 
+    # Hit /health on both. Curl from inside the controller container so we
+    # don't depend on the host port mapping being up (the in-network names
+    # are stable regardless of port remaps).
     $COMPOSE exec -T pinot-controller bash -c "
         set -e
         curl -fsS http://pinot-controller:9000/health | grep -q OK
@@ -115,11 +118,31 @@ smoke_pinot() {
     " >/dev/null || die "Pinot controller + broker are not healthy"
     ok "Pinot controller + broker healthy"
 
+    # Confirm the broker and server have actually registered with the cluster
     out=$($COMPOSE exec -T pinot-controller \
         curl -fsS http://pinot-controller:9000/instances 2>/dev/null)
     echo "$out" | grep -q "Broker_pinot-broker_8099" || die "Broker not registered: $out"
     echo "$out" | grep -q "Server_pinot-server_8098" || die "Server not registered: $out"
     ok "Pinot broker + server registered with controller"
+}
+
+
+smoke_flink() {
+    step "Flink: jobmanager /overview + taskmanager registration"
+
+    # Hit /overview from inside the jobmanager container - same pattern as the
+    # pinot smoke check, so we don't depend on host port mapping being up.
+    out=$($COMPOSE exec -T flink-jobmanager curl -fsS http://localhost:8081/overview 2>/dev/null) \
+        || die "jobmanager /overview not reachable"
+    echo "$out" | grep -q '"flink-version"' || die "jobmanager /overview unexpected payload: $out"
+    ok "Flink jobmanager healthy"
+
+    # Confirm at least 1 taskmanager has registered with the jobmanager. 
+    # Catches misconfigured jobmanager.rpc.address / hostname mismatches.
+    tm_count=$($COMPOSE exec -T flink-jobmanager curl -fsS http://localhost:8081/overview 2>/dev/null \
+        | grep -oE '"taskmanagers":[0-9]+' | head -1 | cut -d: -f2)
+    test "${tm_count:-0}" -ge 1 || die "no taskmanagers registered (got: ${tm_count:-0})"
+    ok "Flink taskmanager registered (count=$tm_count)"
 }
 
 
@@ -164,7 +187,8 @@ case ${1:-all} in
     kafka)  smoke_kafka  ;;
     airflow)  smoke_airflow  ;;
     pinot)  smoke_pinot  ;;
+    flink)  smoke_flink  ;;
     trino)  smoke_trino  ;;
-    all)  smoke_hdfs; smoke_spark; smoke_kafka; smoke_airflow; smoke_pinot; smoke_trino  ;;
-	*)  echo "Usage: $0 [hdfs|spark|kafka|airflow|all]"; exit 2 ;;
+    all)  smoke_hdfs; smoke_spark; smoke_kafka; smoke_airflow; smoke_pinot; smoke_flink; smoke_trino  ;;
+	*)  echo "Usage: $0 [hdfs|spark|kafka|airflow|pinot|flink|trino|all]"; exit 2 ;;
 esac
