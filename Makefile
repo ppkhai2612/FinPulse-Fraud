@@ -10,9 +10,30 @@ HIVE_PG_JAR_PATH = docker/hive-metastore/jars/postgresql-$(HIVE_PG_JAR_VERSION).
 FLINK_KAFKA_JAR_VERSION = 3.2.0-1.19
 FLINK_KAFKA_JAR_PATH = docker/flink/lib/flink-sql-connector-kafka-$(FLINK_KAFKA_JAR_VERSION).jar
 
-# .PHONY: up-core up-kafka down down-volume smoke smoke-hdfs smoke-spark
+.PHONY: help env hive-deps flink-deps up up-core up-bi up-stream up-dwh down logs ps smoke smoke-hdfs smoke-kafka smoke-spark smoke-airflow smoke-pinot smoke-flink smoke-trino nuke
 
-
+help:
+	@echo "Targets:"
+	@echo "  env           Create .env from .env.example with your UID"
+	@echo "  hive-deps     Download Postgres JDBC driver for the Hive Metastore (one-time, ~1.1 MB)"
+	@echo "  flink-deps    Download the Flink SQL Kafka connector jar (one-time, ~5.6 MB)"
+	@echo "  up            Start the full stack (HDFS + Spark + Kafka + Airflow + Pinot + Superset + Flink + HMS + Trino)"
+	@echo "  up-core       Start only HDFS + Spark + Kafka"
+	@echo "  up-bi         Start the BI/serving layers (Pinot + Superset + HMS + Trino)"
+	@echo "  up-stream     Start only Kafka + Flink"
+	@echo "  up-dwh        Start only the Hive Metastore stack (metastore-db + hive-metastore - no Trino)"
+	@echo "  down          Stop containers (keep volumes)"
+	@echo "  nuke          Stop and DELETE all volumes"
+	@echo "  logs s=<svc>  Tail logs for one service, e.g. 'make logs s=namenode'"
+	@echo "  ps            Show running services"
+	@echo "  smoke         Run every smoke check (HDFS / Kafka / Spark / Airflow / Pinot / Flink / Presto)"
+	@echo "  smoke-hdfs    HDFS put/get round-trip"
+	@echo "  smoke-kafka   Produce + consume on a test topic"
+	@echo "  smoke-spark   Submit a tiny PySpark job that reads HDFS"
+	@echo "  smoke-airflow Trigger the smoke DAG and wait for success"
+	@echo "  smoke-pinot   Check Pinot controller + broker /health, broker/server registered"
+	@echo "  smoke-flink   Check Flink jobmanager /overview + at least 1 taskmanager registered"
+	@echo "  smoke-presto  Check Presto + Spark<->HMS<->Presto round-trip via smoke_presto.py"
 
 hive-deps:
 	@mkdir -p $(dir $(HIVE_PG_JAR_PATH))
@@ -34,15 +55,21 @@ flink-deps:
 	    -o $(FLINK_KAFKA_JAR_PATH); \
 	fi
 
-up:
+up: hive-deps flink-deps
 	${COMPOSE} up -d
 
-up-core: up-hdfs up-kafka up-spark
+up-core:
+	${COMPOSE} up -d namenode datanode-1 datanode-2 spark-master spark-worker-1 spark-worker-2 kafka kafdrop
+
+up-bi: hive-deps
+	${COMPOSE} up -d pinot-zookeeper pinot-controller pinot-broker pinot-server superset \
+		metastore-db hive-metastore-init hive-metastore trino-coordinator
 
 up-stream: flink-deps
 	$(COMPOSE) up -d kafka kafdrop flink-jobmanager flink-taskmanager
 
-up-bi: up-pinot up-superset up-hms up-trino
+up-dwh: hive-deps
+	$(COMPOSE) up -d metastore-db hive-metastore-init hive-metastore
 
 down:
 	${COMPOSE} down
@@ -50,17 +77,27 @@ down:
 nuke:
 	${COMPOSE} down -v
 
-# --- SMOKE ---
-smoke: smoke-hdfs smoke-spark smoke-kafka smoke-airflow smoke-pinot smoke-trino
+ps:
+	${COMPOSE} ps
+
+logs:
+	${COMPOSE} logs -f --tail=200 ${s}
+
+smoke: smoke-hdfs smoke-kafka smoke-spark smoke-airflow smoke-pinot smoke-flink smoke-trino
+	@echo ""
+	@echo "============================================"
+	@echo "  All smoke checks passed"
+	@echo "  (HDFS / Kafka / Spark / Airflow / Pinot / Flink / Trino)"
+	@echo "============================================"
 
 smoke-hdfs:
 	@bash scripts/smoke.sh hdfs
 
-smoke-spark:
-	@bash scripts/smoke.sh spark
-
 smoke-kafka:
 	@bash scripts/smoke.sh kafka
+
+smoke-spark:
+	@bash scripts/smoke.sh spark
 
 smoke-airflow:
 	@bash scripts/smoke.sh airflow
@@ -73,30 +110,3 @@ smoke-flink:
 
 smoke-trino:
 	@bash scripts/smoke.sh trino
-
-# --- STACKS ---
-up-hdfs:
-	${COMPOSE} up -d namenode datanode-1 datanode-2
-
-up-spark:
-	${COMPOSE} up -d spark-master spark-worker-1 spark-worker-2
-
-up-kafka:
-	${COMPOSE} up -d kafka kafka-producer
-
-up-airflow:
-	${COMPOSE} up -d postgres airflow-init airflow-apiserver airflow-scheduler airflow-dag-processor
-
-up-pinot:
-	${COMPOSE} up -d pinot-zookeeper pinot-controller pinot-broker pinot-server
-
-up-superset:
-	${COMPOSE} up -d superset
-	
-up-hms:
-	${COMPOSE} up -d metastore-db hive-metastore-init hive-metastore
-
-up-trino:
-	${COMPOSE} up -d trino-coordinator
-
-
