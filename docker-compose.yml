@@ -231,12 +231,12 @@ services:
   #   networks:
   #     - finpulse-network
 
-  kafka-producer:
+  producer:
     image: python:3.11-slim-bullseye
-    container_name: kafka-producer
+    container_name: producer
     volumes: 
-      - ./kafka_producers:/opt/producers
-      - ./data:/opt/data
+      - ./src/producer:/opt/producer
+      - ./data:/data
     command:
       - bash
       - -c
