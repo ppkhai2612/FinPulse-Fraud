@@ -1,3 +1,12 @@
+"""Land the four dimension datasets into /landing/ on HDFS.
+
+Idempotent: re-running is a no-op if the file is already in HDFS at
+the right path. Replication is re-applied every run (cheap, idempotent).
+
+Run from the repo root:
+    python scripts/land_data.py
+"""
+
 from pathlib import Path
 import sys
 import subprocess
@@ -6,12 +15,13 @@ import shlex
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
-REPLICATION_FACTOR = 2
+
+# (local filename, hdfs landing dir, replication factor)
 DATASETS = [
-    ("customer-profiles.json.gz", "/landing/customer-profiles"),
-    ("merchant-directory.csv.gz", "/landing/merchant-directory"),
-    ("fraud-reports.json.gz", "/landing/fraud-reports"),
-    ("device-fingerprints.csv.gz", "/landing/device-fingerprints"),
+    ("customer-profiles.json.gz", "/landing/customer-profiles", 3),
+    ("merchant-directory.csv.gz", "/landing/merchant-directory", 2),
+    ("fraud-reports.json.gz", "/landing/fraud-reports", 3),
+    ("device-fingerprints.csv.gz", "/landing/device-fingerprints", 2),
 ]
 
 
@@ -49,14 +59,7 @@ def nn(*args: str, why: str) -> subprocess.CompletedProcess:
 
 
 def hdfs_exists(path: str) -> bool:
-    """Check if the file is in HDFS
-
-    Args:
-        path (str): The path to the file in HDFS
-
-    Returns:
-        bool: True if the file exists in HDFS, otherwise False
-    """
+    """Check if the file is in HDFS"""
     result = run(
         [
             "docker", "compose", "exec", "-T", "namenode",
@@ -68,14 +71,8 @@ def hdfs_exists(path: str) -> bool:
     return result.returncode == 0
 
 
-def land_to_hdfs(filename: str, hdfs_dir: str, rep: int = REPLICATION_FACTOR) -> None:
-    """Landing data files to HDFS
-
-    Args:
-        filename (str): Name of the file
-        hdfs_dir (str): The directory containing file in HDFS
-        rep (int, optional): The number of file replicas on the DataNodes. Defaults to REPLICATION_FACTOR
-    """
+def land_to_hdfs(filename: str, hdfs_dir: str, rep: int) -> None:
+    """Landing data files to HDFS"""
 
     # check if data files in local fs
     local_file = DATA_DIR / filename
@@ -108,15 +105,17 @@ def land_to_hdfs(filename: str, hdfs_dir: str, rep: int = REPLICATION_FACTOR) ->
     # setrep is idempotent - safe to re-apply on every run
     nn(
         "hdfs", "dfs", "-setrep", str(rep), hdfs_dir,
-        why=f"Set the replication factor of {hdfs_dir} to {str(rep)}",
+        why=f"Set the replication factor of {hdfs_dir} to {rep} (audit/regulatory = 3, default = 2)",
     )
 
 
 def main():
-    print(f"Landing {len(DATASETS)} datasets to HDFS...")
-    for filename, hdfs_dir in DATASETS:
-        print(f"\nLanding {filename} -> {hdfs_dir}")
-        land_to_hdfs(filename, hdfs_dir)
+    print(f"Landing {len(DATASETS)} dimension datasets to HDFS...")
+    print(f"Source: {DATA_DIR}")
+    for filename, hdfs_dir, rep in DATASETS:
+        print(f"\n=== {filename} -> {hdfs_dir} (rep={rep}) ===")
+        land_to_hdfs(filename, hdfs_dir, rep)
+    print("\nDone.")
 
 
 if __name__== "__main__":
