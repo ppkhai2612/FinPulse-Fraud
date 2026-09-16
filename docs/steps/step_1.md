@@ -21,7 +21,10 @@ This step gets the 4 dimension `.gz` files from [data/](../../data/) into `/land
 
 ## Concepts you'll meet here
 
-
+- **HDFS zone pattern** — `/landing` is the immutable raw zone, `/curated` is the cleaned/parqueted zone (Step 2), `/analytics` is for derived outputs (Step 4 onwards). Audits + reruns require the original bytes to still exist; the zone separation is what makes that work.
+- **Per-file replication factor**. The cluster default is 2 (set in [hdfs-site.xml](../../docker/hadoop-server/hdfs-site.xml)). `hdfs dfs -setrep N <path>` raises or lowers replication on a single file or directory; the change is queued through the replication priority queue and picked up asynchronously by the NameNode.
+- **The write pipeline**. When you `put` a file, the client asks the NameNode for replica locations, then streams 64 KB packets through a chain of DataNodes. Knowing this is what's happening makes "why did one DN's disk fill faster?" concrete later.
+- **Idempotency**. A Step 1 loader script must be re-runnable: if `/landing/foo/foo.gz` already exists, skip the `put` rather than duplicating or failing. Audit zones are append-only by intent — re-running today's load shouldn't double the bytes.
 
 ## Pre-flight
 

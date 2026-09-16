@@ -111,7 +111,7 @@ services:
     volumes:
       - ./docker/hadoop-client:/opt/hadoop-conf
       - ./docker/spark:/opt/spark/conf
-      - ./spark_jobs:/opt/spark/work-dir/jobs
+      - ./jobs:/opt/jobs
       - ./pinot-offline:/opt/pinot-offline
     command:
       - /opt/spark/bin/spark-class
@@ -139,7 +139,7 @@ services:
     volumes:
       - ./docker/hadoop-client:/opt/hadoop-conf
       - ./docker/spark:/opt/spark/conf
-      - ./spark_jobs:/opt/spark/work-dir/jobs
+      - ./jobs:/opt/jobs
       - ./pinot-offline:/opt/pinot-offline
     command:
       - /opt/spark/bin/spark-class
@@ -168,7 +168,7 @@ services:
     volumes:
       - ./docker/hadoop-client:/opt/hadoop-conf
       - ./docker/spark:/opt/spark/conf
-      - ./jobs:/opt/spark/work-dir/jobs
+      - ./jobs:/opt/jobs
       - ./pinot-offline:/opt/pinot-offline
     command:
       - /opt/spark/bin/spark-class
@@ -217,19 +217,19 @@ services:
       retries: 10
     mem_limit: 1536m
   
-  # kafdrop:
-  #   image: obsidiandynamics/kafdrop:latest
-  #   container_name: kafdrop
-  #   hostname: kafdrop
-  #   depends_on:
-  #     kafka:
-  #       condition: service_healthy
-  #   environment:
-  #     - KAFKA_BROKERCONNECT=kafka:9094
-  #   ports:
-  #     - "9001:9000"  # UI on localhost:9001 (9000 is taken by HDFS RPC)
-  #   networks:
-  #     - finpulse-network
+  kafdrop:
+    image: obsidiandynamics/kafdrop:latest
+    container_name: kafdrop
+    hostname: kafdrop
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - KAFKA_BROKERCONNECT=kafka:9094
+    ports:
+      - "9001:9000"  # UI on localhost:9001 (9000 is taken by HDFS RPC)
+    networks:
+      - finpulse-network
 
   producer:
     image: python:3.11-slim-bullseye
