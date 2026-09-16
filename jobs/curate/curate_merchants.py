@@ -1,3 +1,8 @@
+"""Curate merchant-directory: gzip CSV at /landing -> Parquet at /curated.
+
+Small dimension (~10K rows) - no partitioning.
+"""
+
 from pyspark.sql import SparkSession
 
 
@@ -8,12 +13,13 @@ CURATED = "hdfs://namenode:9000/curated/merchant-directory"
 def main():
 
     spark = SparkSession.builder.appName("finpulse-curate-merchants").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
 
     df = spark.read.option("header", "true").option("inferSchema", "true").csv(LANDING)
     print(f"Read {df.count()} rows from {LANDING}")
     df.printSchema()
 
-    df.write.mode("overwrite").parquet(CURATED) # create a Spark job
+    df.write.mode("overwrite").parquet(CURATED)
     print(f"Wrote Parquet to {CURATED}")
 
     spark.stop()

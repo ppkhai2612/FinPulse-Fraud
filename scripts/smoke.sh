@@ -47,13 +47,13 @@ smoke_spark() {
       /opt/spark/bin/spark-submit \
           --master spark://spark-master:7077 \
           --conf spark.hadoop.fs.defaultFS=hdfs://namenode:9000 \
-          /opt/spark/work-dir/jobs/smoke/smoke_spark.py
+          /opt/jobs/smoke/smoke_spark.py
     ' | tee /tmp/finpulse-smoke-spark.log > /dev/null || die "spark-submit failed (see /tmp/finpulse-smoke-spark.log)"
 
     grep -q "Total Words: 6. Distinct Words: 3" /tmp/finpulse-smoke-spark.log \
         || die "Spark job ran but produced wrong counts (see /tmp/finpulse-smoke-spark.log)"
 
-    $COMPOSE exect -T namenode hdfs dfs -rm -r -skipTrash /smoke > /dev/null || true
+    $COMPOSE exec -T namenode hdfs dfs -rm -r -skipTrash /smoke > /dev/null || true
     ok "HDFS + Spark integration works"
 }
 
