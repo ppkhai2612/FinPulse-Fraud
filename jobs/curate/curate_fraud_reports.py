@@ -1,3 +1,8 @@
+"""Curate fraud-reports: gzip JSON at /landing -> Parquet at /curated.
+
+Big dimension (~15K rows) — partitioned by fraud_type.
+"""
+
 from pyspark.sql import SparkSession
 
 
@@ -8,6 +13,7 @@ CURATED = "hdfs://namenode:9000/curated/fraud-reports"
 def main():
     
     spark = SparkSession.builder.appName("finpulse-curate-fraud-reports").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
 
     df = spark.read.option("multiline", "true").json(LANDING)
     print(f"Read {df.count()} rows from {LANDING}")

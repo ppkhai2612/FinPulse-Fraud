@@ -1,3 +1,8 @@
+"""Curate device-fingerprints: gzip CSV at /landing -> Parquet at /curated.
+
+Big dimension (~600K rows) — partitioned by device_type.
+"""
+
 from pyspark.sql import SparkSession
 
 
@@ -8,6 +13,7 @@ CURATED = "hdfs://namenode:9000/curated/device-fingerprints"
 def main():
 
     spark = SparkSession.builder.appName("finpulse-curate-devices").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
 
     df = spark.read.option("header", "true").option("inferSchema", "true").csv(LANDING)
     print(f"Read {df.count()} rows from {LANDING}")
