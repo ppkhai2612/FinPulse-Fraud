@@ -6,122 +6,56 @@ Per-component reference for every service in [docker-compose.yml](../../docker-c
 
 | **Doc** | **What is covers** | **Compose services** |
 |-|-|-|
-| hdfs.md |||
-||||
-||||
-||||
-||||
-||||
-||||
-||||
+| [hdfs.md](hdfs.md) | Distributed FS for the four dimension datasets and `/analytics` | `namenode`, `datanode-1`, `datanode-2` |
+| [spark.md](spark.md) | Batch compute - Kafka + HDFS dim joins, feature store, scoring	| `spark-master`, `spark-worker-1`, `spark-worker-2` |
+| [kafka.md](kafka.md) | Source of truth for the `transactions` fact stream + UI | `kafka`, `kafdrop` |
+| [airflow.md](airflow.md) | Orchestrator for the nightly batch + monitoring DAGs | `postgres`, `airflow-init`, `airflow-apiserver`, `airflow-scheduler`, `airflow-dag-processor` |
+| [flink.md](flink.md) | Streaming scoring - event-time, exactly-once with Kafka | `flink-jobmanager`, `flink-taskmanager` |
+| [pinot.md](pinot.md) | Real-time OLAP - pre-aggregated streaming + offline hybrid table | `pinot-zookeeper`, `pinot-controller`, `pinot-broker`, `pinot-server` |
+| [trino_hms.md](trino_hms.md) | DWG serving layer - granular Parquet via Hive Metastore | `metastore-db`, `hive-metastore-init`, `hive-metastore`, `trino-coordinator` |
+| [superset.md](superset.md) | BI / dashboards on top of Pinot and Trino | `superset-init`, `superset` |
 
-## Overview
+## Port map (host <-> service)
 
-- **HDFS (1 NameNode + 2 DataNodes)** — dim landing + Spark curated/analytics outputs
-- **Spark (1 master + 2 workers)** — batch consumer of Kafka transactions
-HDFS dim joins + Pinot offline-segment generation
-- **Kafka (single broker, KRaft)** — source of truth for the transaction fact stream. Three topics: transactions, transactions-scored, fraud-alerts
-- **Pinot (zookeeper + controller + broker + server)** — real-time OLAP serving layer; will host the transactions_scored hybrid table (pre-aggregated, real-time from Kafka + offline from HDFS)
-- **Hive Metastore + Trino (metastore-db + hive-metastore + trino-coordinator)** — DWH serving layer for the granular Parquet in `/curated/*` and `/analytics/*`. Spark saveAsTable registers tables in HMS over Thrift; Trino reads them via the Hive connector
-Superset — BI front-end on Pinot (`pinotdb`) and Trino (`pyhive[Trino]`) via two separate SQLAlchemy drivers
-- **Airflow (LocalExecutor)** — orchestrates the daily Spark batch DAG and monitors the long-running Spark-Structured Streaming job
+| **Service** | **Host port** | **Container port** | **Notes** |
+|-|-|-|-|
+| `namenode` | 9870 | 9870 | HDFS NameNode UI: http://localhost:9870 |
+| `namenode` | 9000 | 9000 | HDFS NameNode RPC, for `hdfs://namenode:9000` clients |
+| `spark-master` | 8080 | 8080 | Spark Master UI: http://localhost:8080 |
+| `spark-master` | 7077 | 7077 | Spark Master RPC: `spark://spark-master:7077` |
+| `kafka` | 9092 | 9092 | Kafka broker - host clients: `localhost:9092`;  in-network: `kafka:9094` |
+| `kafdrop` | 9001 | 9000 | http://localhost:9001 |
+|||||
 
+## Profile groups
 
+[Makefile](../../Makefile) ships three subset bring-up targets that match natural component clusters. Use them when you only need part of the stack and want to skip the ~12 GB resident-memory cost of the full `make up`.
 
-
-## Kafka - Distributed Event Streaming Platform
-
-- Kafka broker and controller are deployed in the same container `kafka` (run Kafka in `KRaft` mode)
-- Explain the environment variables in `kafka` container
-
-    ```bash
-    # BROKER-AND-CONTROLLER LEVEL CONFIGURATIONS
-
-    KAFKA_NODE_ID=0 # node ID associated with the roles in process.roles 
-    KAFKA_PROCESS_ROLES=broker,controller # the roles that Kafka process plays
-    KAFKA_LISTENERS=INTERNAL://:9094,CONTROLLER://:9093,EXTERNAL://:9092 # a list of listeners
-    KAFKA_ADVERTISED_LISTENERS=INTERNAL://kafka:9094,EXTERNAL://localhost:9092 # addresses that the Kafka brokers will advertise to clients
-    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT # map each security protocol for each listener name
-    KAFKA_CONTROLLER_QUORUM_BOOTSTRAP_SERVERS=kafka:9093 # endpoints for bootstrapping the cluster metadata
-    KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER # listeners used by the controller
-    KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 # map of id/endpoint for the set of voters
-    KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL # Name of listener used for communication between brokers
-    KAFKA_LOG_DIRS=/var/lib/kafka/data # directory the log data is stored
-
-    # TOPIC-AND-PARTITION LEVEL CONFIGURATIONS
-    KAFKA_AUTO_CREATE_TOPICS_ENABLE=true # enable auto creation of topic on server
-    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 # replication factor for the offsets topic
-    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACOTR=1 # replication factor for the transaction topic
-    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 # minimum no. replicas that must acknowledge a write to transaction topic in order to be considered successful
-    KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 # amount of time the group coordinator will wait for more consumers to join a new group before performing the first rebalance
-    ```
-
-- After `kafka` is healthy, `kafdrop` and `producer` (Python app) containers are up and running
-    - `kafdrop` (optional) is a web UI for viewing Kafka topics and browsing consumer groups. The tool displays information such as brokers, topics, partitions, consumers, and lets you view messages
-    - `producer` works as a Kafka producer that read transaction data and stream it into Kafka `transaction` topic. Details about Kafka producer in `kafka_producers/transaction_producer.py`
-
-## Pinot - Real-time OLAP serving layer
-
-### Containers
-
-| Container | Role |
-|-|-|
-| `pinot-zookeeper` | Provides fault-tolerant, persistent storage of metadata, including table configurations, schemas, segment metadata, and cluster state that controller uses |
-| `pinot-controller` | Schedules and reschedules resources in a Pinot cluster when metadata changes or a node fails |
-| `pinot-server` | Provide the primary storage for segments and perform the computation required to execute queries |
-| `pinot-broker` | Take query requests from client processes, scatter them to applicable servers, gather the results, and return results to the client |
-
-### Configurations
-
-A few notes regarding infrastructure configuration
-
-- Administrative tasks (e.g., cluster configuration) and batch ingestion jobs are handled by the controller. Therefore, the configurations in `pinot_conf/` only need to be passed into the `pinot-controller` container. In `pinot_conf/`
-
-    - `offline_ingestion_job.yaml`: The ingestion job spec is used while generating, running, and pushing segments from the input files
-    - `transactions_scored_offline_table_config.json`: The offline table spec
-
-        - `segmentsConfig.timeColumnName` is required for `ingestionConfig.batchIngestionConfig.segmentIngestionType="APPEND"`
-        - `tableIndexConfig.invertedIndexColumns` for columns commonly used in predicates such as `IN`, `BETWEEN`
-        - `tableIndexConfig.rangeIndexColumns` for metrics columns that have a very large number of unique values and commonly used in range predicates such as `>`, `<`, `>=`, `<=`, or `BETWEEN`
-
-    - `transactions_scored_realtime_table_config.json`: The realtime table spec
-
-         
-    - `transactions_scored-schema.json`: The table schema spec. Columns in a Pinot table can be categorized into three categories
-
-        - **Dimension**: these columns are typically used in slice and dice operations for answering business queries
-        - **Metric**: these columns represent the quantitative data of the table. Such columns are used for aggregation
-        - **DateTime**: this column represents time columns in the data
-
-
-## Airflow - Orchestration Platform
-
-### Containers
-
-| Container | Role |
-|-|-|
-| `postgres` |  Stores the state of tasks, Dags and variables |
-| `airflow-init` | Run once —  db migrate + create-admin, then exits |
-| `airflow-apiserver` | Serves the REST API and presents a user interface to inspect, trigger and debug the behaviour of Dags and tasks. Web UI: http://localhost:8081 (`airflow`/`airflow`) |
-| `airflow-scheduler` | Handles both triggering scheduled workflows, and submitting Tasks to the executor to run. With `LocalExecutor`, executor runs within the scheduler process |
-| `airflow-dag-processor` | Parses Dag files from a Dag bundle and serializes them into the metadata database |
-
-### Configurations
-
-Some essential configurations include environment variables and bind mounts
-
-| Env var | Value | What is means? |
+| **Target** | **Components started** | **Use when...** |
 |-|-|-|
-| `AIRFLOW__CORE__EXECUTOR` | `LocalExecutor` | The executor class that Airflow use. `LocalExecutor` means tasks are run locally within the scheduler process |
-| `AIRFLOW__CORE__AUTH_MANAGER` | `airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager` | The auth manager class that Airflow use. `SimpleAuthManager` manages each user through their username and role (e.g., `bob` whose role is `admin`) |
-| `AIRFLOW__DATABASE__SQL_ALCHEMY_CONN` | `postgresql+psycopg2://airflow:airflow@postgres/airflow` | The SQLAlchemy connection string to the metadata database. In this project, Postgres was selected |
-| `AIRFLOW__CORE__EXECUTION_API_SERVER_URL` | `'http://airflow-apiserver:8080/execution/`'| The url of the execution api server (`http://localhost:8080` is default) |
+| `make up-core` | HDFS, Spark, Kafka | Working on Spark batch jobs or Kafka producers |
+| `make up-stream` | Kakfa, Flink | Working on the Flink streaming app |
+| `make up-bi` | Pinot, Superset, HMS + Trino | Working on dashboards or ad-hoc DWH SQL |
+| `make up-dwh` | Postgres-backed HMS | Inspecting / debugging the catalog in isolation |
+| `make up` | Everything | Full integration tests, `make smoke`, demos |
 
-| Host path | Container path | Purpose |
-|-|-|-|
-| `./airflow/*` | `/opt/airflow/*` | Data shared between Airflow containers and the host, including: `dags/` (DAG files), `logs/` (logs info), `config/` (configuration options), and `plugin/` (external plugins) |
-| `./spark_jobs` | `/opt/jobs` | Spark jobs that Airflow orchestrates |
+## Per-component smoke tests
 
-> **IMPORTANT**: `user: "50000:0"` runs all Airflow processes as UID 50000 (the default Airflow image user) with GID 0, which avoids permission errors when writing to the bind-mounted `airflow/logs/` directory on the host. The host UID isn't used because the bind-mount permission model with GID 0 + the official entrypoint covers it
+Each component has a smoke target in [Makefile](../../Makefile) that runs an end-to-end probe inside the running stack. They're the first thing to try when something feels off.
 
-`sudo chmod -R 777 airflow/`
+```bash
+make smoke-hdfs       # put / ls / cat / rm round-trip
+make smoke-kafka      # create + produce + consume on an ephemeral topic
+make smoke-spark      # spark-submit a job that reads HDFS
+make smoke-airflow    # trigger smoke_dag and wait for success
+make smoke-pinot      # /health on controller + broker, instance registration
+make smoke-flink      # /overview on jobmanager + ≥ 1 taskmanager registered
+make smoke-trino      # /v1/info + hive catalog + Spark<->HMS<->Trino round-trip
+make smoke            # all of the above
+```
+
+The exact probes live in [smoke.sh](../../scripts/smoke.sh).
+
+## Volumes and make nuke
+
+Every component except Kafdrop, the Airflow init container, and the Superset init container persists state to a named Docker volume. make nuke runs `docker compose down -v` and **deletes every named volume**, which means HDFS data, Kafka topics + offsets, Postgres (Airflow metadata), Pinot ZK + controller + server data, the Superset SQLite metadata DB, and Flink checkpoints + savepoints all go away.

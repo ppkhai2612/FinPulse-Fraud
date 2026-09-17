@@ -22,7 +22,7 @@ Spark is launched without Bitnami's init script - the compose file gives the exp
 | `HADOOP_CONF_DIR=/opt/hadoop-conf` | Tells Spark where the HDFS client config lives, so `hdfs://namenode:9000` resolves |
 | `SPARK_NO_DAEMONIZE=true` | Run Spark in foreground, so docker can manage the process lifecycle |
 | Bind mount `./docker/spark:/opt/spark/conf` | In `/opt/spark/conf`, there are two files: `spark-defaults.conf` (`spark.sql.catalogImplementation=hive` + warehouse dir, so `saveAsTable` registers in HMS) and `log4j2.properties` (for logging) |
-| Bind mount `./spark_jobs:/opt/spark/work-dir/jobs` | Job source code is editable on the host; submit by container path |
+| Bind mount `./jobs:/opt/jobs` | Job source code is editable on the host; submit by container path |
 | Bind mount `./docker/hadoop-client:/opt/hadoop-conf` | Minimal client-side `core-site.xml` + `hdfs-site.xml` |
 | Bind mount `./docker/hadoop-client/hive-site.xml` inside `/opt/hadoop-conf` | Tells Spark where the Hive Metastore Thrift endpoint lives (`thrift://hive-metastore:9083`) |
 
@@ -61,7 +61,7 @@ None - Spark master/workers don't ship with a health endpoint. Instead of, using
 | **System** | 	**What is it** | **Pick instead when...** |
 |-|-|-|
 | **Hadoop MapReduce** | Spark's predecessor | Disk-based intermediates make MR 10–100× slower than Spark on the same hardware; the API is verbose. Therefore, it is almost never used in modern systems |
-| *a 16 GB Docker allocation (Pinot + Superset already eat ~3 GB; HDFS + Kafka + Airflow another ~4 GB*Presto** / **Trino** | Distributed SQL engine | Interactive ad-hoc SQL over heterogeneous sources (S3, Hive, Kafka, MySQL). Not for general ETL - Spark's DataFrame API is more flexible |
+| **Presto** / **Trino** | Distributed SQL engine | Interactive ad-hoc SQL over heterogeneous sources (S3, Hive, Kafka, MySQL). Not for general ETL - Spark's DataFrame API is more flexible |
 
 ## Anatomy of a spark-submit invocation
 
@@ -72,7 +72,7 @@ The `spark-submit` command is included four pieces, each tied to a specific bit 
 | `docker compose exec spark-master` | Step into the running `spark-master` container and run a command | Spark binaries aren't on your laptop, and the master RPC port is in-network only - so the submit has to originate from inside the docker network |
 | `/opt/spark/bin/spark-submit` |  the Spark CLI that launches a Spark driver JVM and sends jobs to a cluster | `apache/spark:4.0.0` installs Spark at `/opt/spark/` (`ls /opt/spark/bin/` to confirm) |
 | `--master spark://spark-master:7077` | Tells the driver which cluster manager to join | `spark://` = Spark's standalone manager. The hostname `spark-master` resolves only on the `finpulse-network` docker network (Compose registers each service name as DNS). 7077 is the master's RPC port; the web UI on 8080 is a different port for a different protocol. |
-| `/opt/spark/work-dir/jobs/<subdir>/<your_job>.py` | The script the driver loads | Path inside the container. The bind mount `./spark_jobs:/opt/jobs` mounts the whole `jobs/` tree, so each step's sub-folder (`smoke/`, `curate/`, ...) is visible at `/opt/jobs/<subdir>/`. The mount is live - editing on the host updates the container view immediately, no rebuild needed. |
+| `/opt/spark/work-dir/jobs/<subdir>/<your_job>.py` | The script the driver loads | Path inside the container. The bind mount `./jobs:/opt/jobs` mounts the whole `jobs/` tree, so each step's sub-folder (`smoke/`, `curate/`, ...) is visible at `/opt/jobs/<subdir>/`. The mount is live - editing on the host updates the container view immediately, no rebuild needed. |
 
 ### What happens after you press enter
 
@@ -92,7 +92,7 @@ The `spark-submit` command is included four pieces, each tied to a specific bit 
 
 I use `spark://` because the compose stack runs Spark's own standalone cluster manager (no YARN, no k8s).
 
-### Why workers also bind-mount `./spark_jobs:/opt/spark/work-dir/jobs`
+### Why workers also bind-mount `./jobs:/opt/jobs`
 
 In **client** deploy mode, the driver ships pickled task closures, so workers don't strictly need the script file. The mount is on workers anyway because
 - (a) it's harmless symmetry across the same image
@@ -106,7 +106,7 @@ Submit a vanilla batch job (HDFS-only):
 ```bash
 docker compose exec spark-master /opt/spark/bin/spark-submit \
     --master spark://spark-master:7077 \
-    /opt/spark/work-dir/jobs/<subdir>/<your_job>.py
+    /opt/jobs/<subdir>/<your_job>.py
 ```
 
 Submit a Kafka-source batch job (note `--packages`):
@@ -115,7 +115,7 @@ Submit a Kafka-source batch job (note `--packages`):
 docker compose exec spark-master /opt/spark/bin/spark-submit \
     --master spark://spark-master:7077 \
     --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0 \
-    /opt/spark/work-dir/jobs/<subdir>/<your_job>.py
+    /opt/jobs/<subdir>/<your_job>.py
 ```
 
 Open a PySpark REPL on the master (handy for poking at HDFS):
