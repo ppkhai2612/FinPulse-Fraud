@@ -18,15 +18,14 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-./airflow}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-./airflow}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-./airflow}/plugins:/opt/airflow/plugins
-    - ./spark_jobs:/opt/jobs
+    - ./jobs:/opt/jobs
     - /var/run/docker.sock:/var/run/docker.sock # run docker in docker
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
     postgres:
       condition: service_healthy
-  networks:
-    - finpulse-network
+  networks: [finpulse]
   group_add: # add "airflow" user to "docker" group, so, it can access /var/run/docker.sock
     - 998
 
@@ -54,8 +53,7 @@ services:
           hdfs namenode -format -clusterid finpulse -nonInteractive
         fi
         exec hdfs namenode # hdfs becomes the container's PID 1 (not bash), allow receiving any Unix signals sent to the container
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9870/ > /dev/null"]
       interval: 10s
@@ -75,8 +73,7 @@ services:
       - datanode1-data:/hadoop/dfs/data
       - ./docker/hadoop-server/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
       - ./docker/hadoop-server/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
-    networks:
-      - finpulse-network
+    networks: [finpulse]
 
   datanode-2:
     image: apache/hadoop:3.5.0
@@ -91,8 +88,7 @@ services:
       - datanode2-data:/hadoop/dfs/data
       - ./docker/hadoop-server/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
       - ./docker/hadoop-server/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
-    networks:
-      - finpulse-network
+    networks: [finpulse]
 
   # ===Spark===
   spark-master:
@@ -100,8 +96,7 @@ services:
     container_name: spark-master
     hostname: spark-master
     user: root
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     ports:
       - 7077:7077 # Spark master RPC port
       - 8080:8080 # Spark master web UI port
@@ -131,8 +126,7 @@ services:
     user: root
     depends_on:
       - spark-master
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     environment:
       - HADOOP_CONF_DIR=/opt/hadoop-conf
       - SPARK_NO_DAEMONIZE=true
@@ -160,8 +154,7 @@ services:
     user: root
     depends_on:
       - spark-master
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     environment:
       - HADOOP_CONF_DIR=/opt/hadoop-conf
       - SPARK_NO_DAEMONIZE=true
@@ -180,7 +173,6 @@ services:
       - 2g
       - --webui-port
       - "8081"
-    # mem_limit: 1536m
 
   # ===Kafka===
   kafka:
@@ -208,8 +200,7 @@ services:
       - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
     volumes:
       - kafka-data:/var/lib/kafka/data
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:9094 > /dev/null"]
       interval: 10s
@@ -228,24 +219,22 @@ services:
       - KAFKA_BROKERCONNECT=kafka:9094
     ports:
       - "9001:9000"  # UI on localhost:9001 (9000 is taken by HDFS RPC)
-    networks:
-      - finpulse-network
+    networks: [finpulse]
 
   producer:
-    image: python:3.11-slim-bullseye
+    image: python:3.11-slim
     container_name: producer
-    volumes: 
-      - ./src/producer:/opt/producer
-      - ./data:/data
     command:
       - bash
       - -c
       - "pip install --no-cache-dir kafka-python==2.0.3 && exec sleep infinity"
+    volumes: 
+      - ./src/producer:/opt/producer:ro
+      - ./data:/data:ro
     depends_on:
       kafka:
         condition: service_healthy
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     restart: unless-stopped
 
   # ===Airflow===
@@ -264,8 +253,7 @@ services:
       retries: 5
       start_period: 5s
     restart: always
-    networks:
-      - finpulse-network
+    networks: [finpulse]
 
   airflow-init:
     <<: *airflow-common
@@ -387,8 +375,7 @@ services:
     volumes:
       - pinot-zk-data:/data
       - pinot-zk-datalog:/datalog
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       test: ["CMD-SHELL", "zkServer.sh status"]
       interval: 10s
@@ -420,8 +407,7 @@ services:
     depends_on:
       pinot-zookeeper:
         condition: service_healthy
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9000/health || exit 1"]
       interval: 10s
@@ -449,8 +435,7 @@ services:
     depends_on:
       pinot-controller:
         condition: service_healthy
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8099/health || exit 1"]
       interval: 10s
@@ -484,8 +469,7 @@ services:
     depends_on:
       pinot-broker:
         condition: service_healthy
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8097/health/readiness || exit 1"]
       interval: 10s
@@ -508,8 +492,7 @@ services:
       test: ["CMD", "pg_isready", "-U", "hive"]
       interval: 5s
       retries: 10
-    networks:
-      - finpulse-network
+    networks: [finpulse]
 
   hive-metastore-init:
     image: apache/hive:4.0.0
@@ -548,8 +531,7 @@ services:
         condition: service_healthy
       namenode:
         condition: service_healthy
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     restart: "no"
 
   hive-metastore:
@@ -575,8 +557,7 @@ services:
     depends_on:
       hive-metastore-init:
         condition: service_completed_successfully
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       # HMS exposes Thrift on 9083 — no HTTP endpoint, so just probe TCP.
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9083' || exit 1"]
@@ -600,8 +581,7 @@ services:
         condition: service_healthy
       namenode:
         condition: service_healthy
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/v1/info | grep -q '\"starting\":false'"]
       interval: 10s
@@ -628,8 +608,7 @@ services:
       - ./docker/superset/requirements-local.txt:/app/docker/requirements-local.txt
       - ./docker/superset/superset_config.py:/app/pythonpath/superset_config.py
       - ./docker/superset/superset-init.sh:/app/superset-init.sh
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     restart: "no"
 
   superset:
@@ -650,8 +629,7 @@ services:
     depends_on:
       superset-init:
         condition: service_completed_successfully
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8088/health"]
       interval: 30s
@@ -659,7 +637,6 @@ services:
       retries: 5
       start_period: 90s   # gunicorn cold start + pip-install pinotdb on first run
     restart: unless-stopped
-
 
   # ===Apache Flink===
   flink-jobmanager:
@@ -698,8 +675,7 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8081/overview > /dev/null"]
       interval: 15s
@@ -734,8 +710,7 @@ services:
     depends_on:
       flink-jobmanager:
         condition: service_healthy
-    networks:
-      - finpulse-network
+    networks: [finpulse]
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8081/overview > /dev/null"]
       interval: 15s
@@ -760,5 +735,5 @@ volumes:
 
 
 networks:
-  finpulse-network:
+  finpulse:
     driver: bridge
