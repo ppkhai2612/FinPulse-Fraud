@@ -362,7 +362,7 @@ Watch progress in either:
 
 - **Kafdrop** at http://localhost:9001 — refresh the topic page; the message count climbs in near-real-time.
 
-If the producer is interrupted mid-run, just re-run it. The topic already has whatever it sent, so you'll end up with **more than 1M messages** if you start from scratch — that's fine because Step 4 batch-reads by offset range, not by row count, and the consumer is content with duplicate `txn_id`s as long as the joins deduplicate downstream. (If you want a clean 1M, delete the topic first: `kafka-topics.sh --delete --topic transactions` then redo 3b and 3e)
+If the producer is interrupted mid-run, just re-run it. The topic already has whatever it sent, so you'll end up with **more than 1M messages** if you start from scratch — that's fine because Step 4 batch-reads by offset range, not by row count, and the consumer is content with duplicate `txn_id`s as long as the joins deduplicate downstream. (If you want a clean 1M, delete the topic first: `kafka-topics.sh --delete --topic transactions` then redo 3b)
 
 Commit as `step 3e: full transactions replay into Kafka`.
 

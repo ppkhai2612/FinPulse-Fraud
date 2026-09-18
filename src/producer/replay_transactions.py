@@ -17,7 +17,7 @@ import time
 from kafka import KafkaProducer
 
 
-CSV_PATH = "/opt/data/transactions.csv.gz" # bind-mounted from ./data
+CSV_PATH = "/data/transactions.csv.gz" # bind-mounted from ./data
 BOOTSTRAP = "kafka:9094" # INTERNAL listener (we're inside the network)
 TOPIC = "transactions"
 

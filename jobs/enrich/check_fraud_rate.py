@@ -7,6 +7,8 @@ ANALYTICS = "hdfs://namenode:9000/analytics/transactions_enriched/"
 
 def main():
     spark = SparkSession.builder.appName("finpulse-check-fraud-rate").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
+    
     df = spark.read.parquet(ANALYTICS)
     df.agg(
         count("*").alias("total"),
