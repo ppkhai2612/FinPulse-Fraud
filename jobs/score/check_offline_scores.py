@@ -1,8 +1,20 @@
+"""Print offline scoring metrics from /analytics/scored/.
+
+Step 6 verifier: confusion matrix, precision/recall/F1, rule trigger
+rates, and a prevented-loss estimate.
+
+Submit:
+    docker compose exec spark-master /opt/spark/bin/spark-submit \\
+        --master spark://spark-master:7077 \\
+        /opt/jobs/score/check_offline_scores.py
+"""
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import count, sum as spark_sum, when, col, avg
 
 
 SCORED = "hdfs://namenode:9000/analytics/scored"
+
 RULE_COLS = [
     "rule_high_amount",
     "rule_velocity",
@@ -13,7 +25,6 @@ RULE_COLS = [
 
 
 def print_confusion_and_metrics(df):
-    """"""
     agg = df.agg(
         count("*").alias("total"),
         spark_sum(
@@ -52,7 +63,7 @@ def print_confusion_and_metrics(df):
 
 
 def print_rule_rates(df):
-    print("Rule rates:")
+    print("Rule trigger rates:")
     exprs = [
         avg(col(rule).cast("double")).alias(rule)
         for rule in RULE_COLS
@@ -83,6 +94,8 @@ def print_sample_rows(df):
 
 def main():
     spark = SparkSession.builder.appName("finpulse-check-offline-scores").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
+    
     df = spark.read.parquet(SCORED)
 
     print_confusion_and_metrics(df)
@@ -90,6 +103,7 @@ def main():
     print_sample_rows(df)
 
     spark.stop()
+
 
 if __name__ == "__main__":
     main()
