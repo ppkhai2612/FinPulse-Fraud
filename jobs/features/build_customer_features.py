@@ -1,50 +1,66 @@
+"""Build /analytics/customer_features/.
+
+Reads the enriched transaction fact from Step 4, collapses duplicate
+transaction IDs from replay/join fan-out, computes one row of behavioral
+baseline features per card, and writes Parquet for downstream scoring.
+
+Submit:
+    docker compose exec spark-master /opt/spark/bin/spark-submit \\
+        --master spark://spark-master:7077 \\
+        /opt/jobs/features/build_customer_features.py
+"""
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    count, avg, stddev_samp, coalesce,
-    percentile_approx, approx_count_distinct,
-    collect_set, col, when, lit, datediff,
-    min as spark_min, max as spark_max
+    approx_count_distinct, avg,
+    coalesce, col, collect_set,
+    count, datediff, expr, lit,
+    max as spark_max,
+    min as spark_min,
+    stddev_samp, when
 )
 
 
 ENRICHED = "hdfs://namenode:9000/analytics/transactions_enriched"
 CUSTOMERS = "hdfs://namenode:9000/curated/customer-profiles"
-CUSTOMER_FEATURES = "hdfs://namenode:9000/analytics/customer_features"
+FEATURES = "hdfs://namenode:9000/analytics/customer_features"
 
 
-def read_transactions(spark):
+def read_transaction_events(spark: SparkSession):
+    """Read enriched rows and keep one event per txn_id before aggregating."""
     return spark \
         .read.parquet(ENRICHED) \
         .select(
             "txn_id", "timestamp",
             "card_id", "merchant_id",
-            "amount", "currency",
-            "merchant_category", "country",
-            "channel", "is_international"
+            "amount", "merchant_category", 
+            "country", "channel",
+            "is_international"
         ).dropDuplicates(['txn_id'])
 
 
 def read_customers(spark):
+    """Read stable per-card profile fields kept with the feature row."""
     return spark \
         .read.parquet(CUSTOMERS) \
         .select(
-            "customer_id", "card_id", "age",
+            "card_id", "customer_id", "age",
             "income_bracket", "account_age_months",
             "avg_monthly_spend", "home_country",
             "typical_categories", "credit_limit"
         )
     
         
-def build_customer_features(transactions):
+def build_features(txns):
     """Aggregate transactions into one baseline per card."""
-    return transactions.groupBy("card_id") \
+    return txns.groupBy("card_id") \
         .agg(
             count("*").alias("txn_count"),
             avg("amount").alias("avg_amount"),
             coalesce(stddev_samp("amount"), lit(0.0)).alias("stddev_amount"), # standard deviation
-            percentile_approx("amount", 0.50).alias("p50_amount"),
-            percentile_approx("amount", 0.95).alias("p95_amount"),
-            percentile_approx("amount", 0.99).alias("p99_amount"),
+            expr("percentile_approx(amount, 0.50, 10000)").alias("p50_amount"),
+            expr("percentile_approx(amount, 0.95, 10000)").alias("p95_amount"),
+            expr("percentile_approx(amount, 0.99, 10000)").alias("p99_amount"),
             approx_count_distinct("merchant_id").alias("unique_merchant_count"), # estimates the approximate distinct count of elements in a column
             approx_count_distinct("merchant_category").alias("unique_category_count"),
             approx_count_distinct("country").alias("unique_country_count"),
@@ -61,43 +77,48 @@ def build_customer_features(transactions):
         .withColumn("txns_per_active_day", col("txn_count") / col("active_days"))
 
 
-def attach_customer_profile(customers, customer_features):
-    return customers.join(customer_features, on="card_id", how="left")
+def attach_customer_profile(customers, features):
+    """Keep all customer cards, attaching transaction features when present."""
+    out = customers.join(features, on="card_id", how="left")
 
-    # return out.fillna({
-    #     "txn_count": 0,
-    #     "avg_amount": 0.0,
-    #     "stddev_amount": 0.0,
-    #     "p50_amount": 0.0,
-    #     "p95_amount": 0.0,
-    #     "p99_amount": 0.0,
-    #     "unique_merchant_count": 0,
-    #     "unique_category_count": 0,
-    #     "unique_country_count": 0,
-    #     "pct_international": 0.0,
-    #     "pct_online": 0.0,
-    #     "pct_atm": 0.0
-    # })
+    return out.fillna({
+        "txn_count": 0,
+        "avg_amount": 0.0,
+        "stddev_amount": 0.0,
+        "p50_amount": 0.0,
+        "p95_amount": 0.0,
+        "p99_amount": 0.0,
+        "unique_merchant_count": 0,
+        "unique_category_count": 0,
+        "unique_country_count": 0,
+        "pct_international": 0.0,
+        "pct_online": 0.0,
+        "pct_atm": 0.0,
+        "active_days": 0,
+        "txns_per_active_day": 0.0,
+    })
+
 
 def write(out):
-    out.coalesce(4).write.mode("overwrite").parquet(CUSTOMER_FEATURES)
+    out.coalesce(4).write.mode("overwrite").parquet(FEATURES)
 
 
 def main():
     spark = SparkSession.builder.appName("finpulse-build-customer-features").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
 
     # read data
-    transactions = read_transactions(spark)
+    txns = read_transaction_events(spark)
     customers = read_customers(spark)
 
     # build
-    customer_features = build_customer_features(transactions)
-    out = attach_customer_profile(customers, customer_features)
+    features = build_features(txns)
+    out = attach_customer_profile(customers, features)
 
     # write out
     write(out)
-    print(f"Transactions used: {transactions.count()}")
-    print(f"Wrote {out.count()} card feature rows to {CUSTOMER_FEATURES}")
+    print(f"Transaction events used: {txns.count()}")
+    print(f"Wrote {out.count()} card feature rows to {FEATURES}")
 
     spark.stop()
 

@@ -1,4 +1,14 @@
-"""Sanity checks for /analytics/customer_features/"""
+"""Print sanity checks for /analytics/customer_features/.
+
+Step 5 verifier: confirms one feature row per card and shows the main
+behavioral baseline distributions.
+
+Submit:
+    docker compose exec spark-master /opt/spark/bin/spark-submit \\
+        --master spark://spark-master:7077 \\
+        /opt/jobs/features/check_customer_features.py
+"""
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import count, countDistinct, max as spark_max, avg, col
 
@@ -8,9 +18,11 @@ FEATURES = "hdfs://namenode:9000/analytics/customer_features"
 
 def main():
     spark = SparkSession.builder.appName("finpulse-check-customer-features").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
+    
     df = spark.read.parquet(FEATURES)
 
-    print("Feature aggregation checks:")
+    print("Feature store row checks:")
     df.agg(
         count("*").alias("rows"),
         countDistinct("card_id").alias("distinct_cards"),
@@ -37,7 +49,7 @@ def main():
         "pct_online",
     ).describe().show(truncate=False)
 
-    print("Sample rows:")
+    print("Sample feature rows:")
     df.select(
         "card_id",
         "txn_count",
