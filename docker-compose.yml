@@ -651,9 +651,6 @@ services:
       - bash
     command: jobmanager
     environment:
-      # Multi-line env value: FLINK_PROPERTIES is appended to flink-conf.yaml
-      # by the image entrypoint. jobmanager.rpc.address must resolve from
-      # taskmanager containers, so use the docker hostname not localhost.
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
         rest.address: flink-jobmanager
@@ -663,15 +660,12 @@ services:
         state.checkpoints.dir: file:///opt/flink/data/checkpoints
         state.savepoints.dir: file:///opt/flink/data/savepoints
     ports:
-      - "8082:8081"  # Flink web UI (8081 is Airflow's)
+      - "8082:8081"
     volumes:
       - flink-data:/opt/flink/data
-      - ./src/consumer:/opt/flink/usrlib   # job artifacts
-      - ./docker/hadoop-client:/opt/hadoop-conf   # HDFS client config
-      # Kafka SQL connector — not bundled in the base image. Fetched by
-      # `make flink-deps` into docker/flink/lib/ and overlaid into the
-      # Flink lib dir so sql-client / job classpath can see it.
-      - ./docker/flink/lib/flink-sql-connector-kafka-3.2.0-1.19.jar:/opt/flink/lib/flink-sql-connector-kafka.jar
+      - ./src/consumer:/opt/flink/usrlib:ro
+      - ./docker/flink/lib/flink-sql-connector-kafka-3.2.0-1.19.jar:/opt/flink/lib/flink-sql-connector-kafka.jar:ro
+      - ./docker/hadoop-client:/opt/hadoop-conf:ro
     depends_on:
       kafka:
         condition: service_healthy
@@ -704,19 +698,13 @@ services:
         state.savepoints.dir: file:///opt/flink/data/savepoints
     volumes:
       - flink-data:/opt/flink/data
-      - ./src/consumer:/opt/flink/usrlib
-      - ./docker/hadoop-client:/opt/hadoop-conf
-      - ./docker/flink/lib/flink-sql-connector-kafka-3.2.0-1.19.jar:/opt/flink/lib/flink-sql-connector-kafka.jar
+      - ./src/consumer:/opt/flink/usrlib:ro
+      - ./docker/flink/lib/flink-sql-connector-kafka-3.2.0-1.19.jar:/opt/flink/lib/flink-sql-connector-kafka.jar:ro
+      - ./docker/hadoop-client:/opt/hadoop-conf:ro
     depends_on:
       flink-jobmanager:
         condition: service_healthy
     networks: [finpulse]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/overview > /dev/null"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
 
 volumes:
